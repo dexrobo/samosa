@@ -1,0 +1,39 @@
+extend-exclude = ["*_pb2.py", "*_pb2_grpc.py"]
+line-length = 120
+target-version = "py311"
+
+[lint.isort]
+known-third-party = ["dex"]
+
+[lint]
+ignore = [
+  "E713", # not-in-test
+  "E714", # not-is-test
+
+  "PLR2004", # magic-value-comparison
+  "PLR5501", # collapsible-else-if
+  "PLW0602", # global-variable-not-assigned
+]
+
+select = [
+  # pycodestyle error checks
+  "E4", # multiple-imports-on-one-line, module-import-not-at-top-of-file
+  "E7", # multiple-statements-on-one-line, useless-semicolon 
+  "E9", # io-error, syntax-error
+
+  # Pyflakes checks 
+  "F",
+
+  # pep8-naming checks
+  "N801", # invalid-class-name
+  "N802", # invalid-function-name
+  "N803", # invalid-argument-name
+  "N815", # mixed-case-variable-in-class-scope
+  "N816", # mixed-case-variable-in-global-scope
+
+  # Pylint checks
+  "PLC", # Pylint conventions
+  "PLE", # Pylint errors
+  "PLR", # Pylint refactor
+  "PLW", # Pylint warnings
+]

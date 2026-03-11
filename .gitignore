@@ -4,3 +4,4 @@ bazel-testlogs
 .bazelrc.user
 .vscode/
 .DS_Store
+private/

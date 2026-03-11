@@ -1,0 +1,19 @@
+config_setting(
+    name = "asan_config",
+    values = {"define": "asan=true"},
+)
+
+config_setting(
+    name = "tsan_config",
+    values = {"define": "tsan=true"},
+)
+
+config_setting(
+    name = "gcov_config",
+    values = {"define": "gcov=true"},
+)
+
+config_setting(
+    name = "ci_config",
+    values = {"define": "ci=true"},
+)

@@ -1,0 +1,210 @@
+# clang-tidy configuration for this project.
+#
+# Explanation for why some of the checks are disabled:
+#
+# -bugprone-easily-swappable-parameters: hard to design around this in certain scenarios like comparator functions and
+#    overriding third-party interfaces
+# -bugprone-exception-escape: Temporarily added due to various clang-tidy issues such as:
+#    https://github.com/llvm/llvm-project/issues/152026
+# -bugprone-lambda-function-name: SPDLOG macros that capture __FUNCTION__ are used inside lambdas
+# -bugprone-unchecked-optional-access: Temporarily added due to clang-tidy issue:
+#    https://github.com/llvm/llvm-project/issues/55530
+# -bugprone-return-const-ref-from-parameter: Not needed as we enable GCC's Wdangling-reference check.
+# -cppcoreguidelines-avoid-do-while: Do while loops are the correct solution for some problems and are not difficult to
+#    understand and follow (as opposed to say goto-based control flow)
+# -cppcoreguidelines-pro-bounds-constant-array-index: Part of an optional strict bounds-safety profile which is overly
+#    restrictive for our codebase
+# -cppcoreguidelines-pro-bounds-array-to-pointer-decay: Part of an optional strict bounds-safety profile which is overly
+#    restrictive for our codebase
+# -cppcoreguidelines-pro-bounds-pointer-arithmetic: Part of an optional strict bounds-safety profile which is overly
+#    restrictive for our codebase
+# -cppcoreguidelines-pro-type-vararg: Flags uses of common C standard library functions such as printf
+# -google-runtime-int: Too verbose to use in all contexts. Prefer to leave this up to the developer.
+# -misc-header-include-cycle: Header include cycles are useful in header-only libraries with split declaration and
+#    definition headers, where the declaration header includes the definition header at the bottom but the definition
+#    header also includes the declaration header at the top the same way a source file would for developer convenience.
+# -misc-include-cleaner: Does not seem to work very well, often requiring inclusion of private headers if that is where 
+#    public APIs are actually declared, which is the case even for some standard library headers.
+# -misc-no-recursion: Recursion is a reasonable solution in some cases
+# -modernize-pass-by-value: This practice is suboptimal for both move and copy caes. Perfect forwarding, possibly with
+#    a concept documenting and enforcing a type is a better solution.
+# -modernize-return-braced-init-list: This seems to hurt readability in some cases. Prefer to leave this up to the
+#    developer.
+# -modernize-use-trailing-return-type: This is purely stylistic and controversial. Prefer to leave this up to the
+#    developer.
+# -readability-else-after-return: It is not clear that this improves readability in all cases. Prefer to leave this up
+#    to the developer.
+# -readability-function-cognitive-complexity: Utility of this check is unclear in some cases
+# -readability-suspicious-call-argument: Flags many cases incorrectly. Perhaps could be made useful if we add a custom
+#    selection / tuning of its string distance function.
+# -readability-use-anyofallof: It is not clear that this improves readability compared to a range-based for loop, even
+#    for simple cases
+
+# Top-level config file.
+InheritParentConfig: False
+
+Checks: >
+  -*,
+  abseil-*,
+  boost-*,
+  bugprone-*,
+  concurrency-*,
+  cppcoreguidelines-*,
+  google-*,
+  misc-*,
+  modernize-*,
+  performance-*,
+  portability-*,
+  readability-*,
+  -boost-use-ranges,
+  -bugprone-avoid-global-namespace,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-exception-escape,
+  -bugprone-missing-argument-const,
+  -bugprone-return-const-ref-from-parameter,
+  -bugprone-unchecked-optional-access,
+  -cppcoreguidelines-avoid-c-arrays,
+  -cppcoreguidelines-avoid-capturing-lambda-coroutines,
+  -cppcoreguidelines-avoid-do-while,
+  -cppcoreguidelines-avoid-magic-numbers,
+  -cppcoreguidelines-narrowing-conversions,
+  -cppcoreguidelines-non-private-member-variables-in-classes,
+  -cppcoreguidelines-pro-bounds-constant-array-index,
+  -cppcoreguidelines-pro-bounds-array-to-pointer-decay,
+  -cppcoreguidelines-pro-bounds-pointer-arithmetic,
+  -cppcoreguidelines-pro-type-reinterpret-cast,
+  -cppcoreguidelines-pro-type-union-access,
+  -cppcoreguidelines-pro-type-vararg,
+  -cppcoreguidelines-special-member-functions,
+  -google-default-arguments,
+  -google-readability-braces-around-statements,
+  -google-readability-todo,
+  -misc-header-include-cycle,
+  -misc-include-cleaner,
+  -misc-no-recursion,
+  -misc-non-private-member-variables-in-classes,
+  -misc-unused-parameters,
+  -misc-use-internal-linkage,
+  -modernize-auto-construction,
+  -modernize-pass-by-value,
+  -modernize-return-braced-init-list,
+  -modernize-use-designated-initializers,
+  -modernize-use-scoped-lock,
+  -modernize-use-std-format,
+  -modernize-use-span,
+  -modernize-use-trailing-return-type,
+  -modernize-use-views-iota,
+  -portability-avoid-pragma-once,
+  -performance-data-member-packing,
+  -performance-enum-size,
+  -portability-template-virtual-member-function,
+  -readability-ambiguous-smartptr-reset-call,
+  -readability-avoid-const-params-in-decls,
+  -readability-braces-around-statements,
+  -readability-else-after-return,
+  -readability-function-cognitive-complexity,
+  -readability-identifier-length,
+  -readability-initializer-list-construction,
+  -readability-magic-numbers,
+  -readability-math-missing-parentheses,
+  -readability-single-scalar-literal,
+  -readability-static-accessed-through-instance,
+  -readability-suspicious-call-argument,
+  -readability-unnecessary-abbreviations,
+  -readability-use-anyofallof,
+
+# Only lint dex and tools header files (not system or thirdparty).
+HeaderFilterRegex: '^\.\/(dex|tools)\/'
+
+# Use .clang-format file for formatting automated fixes.
+FormatStyle: 'file'
+
+# Treat all warnings as errors.
+WarningsAsErrors: '*'
+
+CheckOptions:
+  # CharTypdefsToIgnore is a typo for CharTypedefsToIgnore.  Fixed in the next clang.
+  - key: bugprone-signed-char-misuse.CharTypdefsToIgnore
+    value: 'int8_t'
+  - key: concurrency-mt-unsafe.FunctionSet
+    value: glibc
+  - key: google-runtime-int.TypeSuffix
+    value: _t
+  - key: readability-identifier-naming.ClassCase
+    value: CamelCase
+  - key: readability-identifier-naming.ClassConstantCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ClassConstantIgnoredRegexp
+    value: '^k[0-9]*([A-Z][a-z0-9]*)+$|^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*_?$|^([a-z0-9]+_)+_?$'
+  - key: readability-identifier-naming.ClassMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ClassMemberIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*_?$|^([a-z0-9]+_)+$'
+  - key: readability-identifier-naming.PublicMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PublicMemberIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*_?$|^([a-z0-9]+_)+$'
+  - key: readability-identifier-naming.ConceptCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstantCase
+    value: 'lower_case'
+  - key: readability-identifier-naming.ConstantIgnoredRegexp
+    value: '^k[0-9]*([A-Z][a-z0-9]*)+$|^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*$'
+  - key: readability-identifier-naming.ConstexprFunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.ConstexprFunctionIgnoredRegexp
+    value: 'parse' # Needed by fmt
+  - key: readability-identifier-naming.EnumCase
+    value: CamelCase
+  - key: readability-identifier-naming.EnumConstantIgnoredRegexp
+    value: '.*'
+  - key: readability-identifier-naming.FunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalFunctionCase
+    value: CamelCase
+  - key: readability-identifier-naming.GlobalFunctionIgnoredRegexp
+    value: '^format_as$|^from_json$|^to_json$' # Needed by fmt, nlohmann::json
+  - key: readability-identifier-naming.MacroDefinitionCase
+    value: UPPER_CASE
+  - key: readability-identifier-naming.MethodCase
+    value: CamelCase
+  - key: readability-identifier-naming.MethodIgnoredRegexp
+    value: '^format$|^from_json$|^to_json$'
+  - key: readability-identifier-naming.NamespaceCase
+    value: lower_case
+  - key: readability-identifier-naming.NamespaceIgnoredRegexp
+    value: '^[a-z]+(_[a-z]+)*_$'
+  - key: readability-identifier-naming.ParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.ParameterIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*$'
+  - key: readability-identifier-naming.PrivateMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.PrivateMemberSuffix
+    value: _
+  - key: readability-identifier-naming.PrivateMemberIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*_$'
+  - key: readability-identifier-naming.ProtectedMemberCase
+    value: lower_case
+  - key: readability-identifier-naming.ProtectedMemberSuffix
+    value: _
+  - key: readability-identifier-naming.ProtectedMemberIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*_$'
+  - key: readability-identifier-naming.TypeAliasCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypedefCase
+    value: CamelCase
+  - key: readability-identifier-naming.TypeTemplateParameterCase
+    value: CamelCase
+  - key: readability-identifier-naming.UnionCase
+    value: CamelCase
+  - key: readability-identifier-naming.ValueTemplateParameterCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableCase
+    value: lower_case
+  - key: readability-identifier-naming.VariableIgnoredRegexp
+    value: '^[a-zA-Z](_([A-Z]|([a-z0-9]+)))*$'
+  - key: readability-simplify-boolean-expr.SimplifyDeMorgan
+    value: false
+  - key: readability-uppercase-literal-suffix.NewSuffixes
+    value: L;LL;LU;LLU
