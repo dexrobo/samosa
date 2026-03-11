@@ -72,6 +72,14 @@ cc_test(
     name = "shared_memory_test",
     size = "small",
     srcs = ["shared_memory_test.cc"],
+    # This test intercepts system calls using dlsym(RTLD_NEXT, ...), which doesn't work with
+    # static sanitizers. Use --config=asan_dynamic or --config=tsan_dynamic instead of
+    # --config=asan or --config=tsan to test with sanitizers.
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":shared_memory",
         SPDLOG,
@@ -104,6 +112,7 @@ cc_test(
     size = "small",
     srcs = ["shared_memory_streaming_test.cc"],
     copts = ["-Wno-stringop-overflow"],
+    env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
     deps = [
         ":shared_memory_streaming",
@@ -119,7 +128,23 @@ cc_test(
     size = "small",
     srcs = ["shared_memory_streaming_delay_test.cc"],
     copts = ["-Wno-stringop-overflow"],
+    env = select({
+        "//:ci_config": {
+            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+            "REDUCED_TEST_SET": "1",
+        },
+        "//conditions:default": {
+            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+        },
+    }),
     flaky = True,
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        # TODO: Frequently fails in coverage job even though it is marked flaky
+        "//:gcov_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":shared_memory_streaming",
         ":shared_memory_streaming_test_private",
@@ -177,6 +202,7 @@ cc_test(
     name = "shared_memory_monitor_test",
     size = "small",
     srcs = ["shared_memory_monitor_test.cc"],
+    env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
     deps = [
         ":shared_memory_monitor",

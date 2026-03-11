@@ -216,5 +216,3 @@ bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::ValidateBuffer(
 }
 
 }  // namespace dex::shared_memory
-
-#define SHARED_MEMORY_IMPL_H
