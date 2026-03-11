@@ -13,7 +13,10 @@ ABSL_STRINGS = "@com_google_absl//absl/strings"
 cc_library(
     name = "shared_memory_private",
     srcs = ["shared_memory_private.cc"],
-    hdrs = ["shared_memory_private.h"],
+    hdrs = [
+        "observer_ptr.h",
+        "shared_memory_private.h",
+    ],
 )
 
 cc_library(

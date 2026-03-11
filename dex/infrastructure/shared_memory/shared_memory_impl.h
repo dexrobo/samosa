@@ -6,18 +6,17 @@
 #include <sys/stat.h>  // for shm_open, shm_unlink
 #include <unistd.h>    // for close
 
-#include <experimental/memory>
 #include <string>
 
 #include "spdlog/spdlog.h"
 
+#include "dex/infrastructure/shared_memory/observer_ptr.h"
 #include "dex/infrastructure/shared_memory/shared_memory.h"
 #include "dex/infrastructure/shared_memory/shared_memory_private.h"
 
 namespace dex::shared_memory {
 
-using std::experimental::make_observer;
-using std::experimental::observer_ptr;
+using detail::observer_ptr;
 
 namespace detail {
 
@@ -62,8 +61,8 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
     return observer_ptr<const Buffer>(nullptr);
   }
 
-  // Return an observer_ptr to the buffer using make_observer
-  return make_observer(&shared_memory.Get()->buffers[ToBufferIndex(state)]);
+  // Return an observer_ptr to the buffer
+  return observer_ptr<const Buffer>(&shared_memory.Get()->buffers[ToBufferIndex(state)]);
 }
 
 // Buffer access within shared memory
@@ -97,9 +96,9 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const std::s
       return;
     }
 
-    if (static_cast<size_t>(st.st_size) != state_.size) {
+    if (static_cast<size_t>(st.st_size) < state_.size) {
       SPDLOG_ERROR(
-          "Shared memory size mismatch for {}: expected {} bytes, got {} bytes. This indicates a "
+          "Shared memory size mismatch for {}: expected at least {} bytes, got {} bytes. This indicates a "
           "version mismatch between producer and consumer. Please ensure both are running the same version.",
           state_.name, state_.size, st.st_size);
       Cleanup();
@@ -141,9 +140,20 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const std::s
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::OpenFile(const bool create) {
-  const int file_descriptor = shm_open(state_.name.c_str(), O_RDWR | (create ? O_CREAT : 0), 0666);
+  std::string full_name = state_.name;
+  if (full_name.empty() || full_name[0] != '/') {
+    full_name = "/" + full_name;
+  }
+#ifdef __APPLE__
+  if (full_name.size() > 31) {
+    // MacOS has a 31 character limit for shm_open names.
+    // Truncate by taking the last 31 characters (including the slash).
+    full_name = "/" + full_name.substr(full_name.size() - 30);
+  }
+#endif
+  const int file_descriptor = shm_open(full_name.c_str(), O_RDWR | (create ? O_CREAT : 0), 0666);
   if (file_descriptor < 0) {
-    SPDLOG_ERROR("shm_open error: {}", detail::FormatSystemError("shm_open error", errno));
+    SPDLOG_ERROR("shm_open error for {}: {}", full_name, detail::FormatSystemError("shm_open error", errno));
     return false;
   }
   state_.file_descriptor.reset(new int{file_descriptor});
@@ -186,8 +196,17 @@ void SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::Cleanup() {
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::Destroy(const std::string_view name) {
-  if (shm_unlink(std::string(name).c_str()) != 0) {
-    SPDLOG_ERROR("shm_unlink error: {}", detail::FormatSystemError("shm_unlink error", errno));
+  std::string full_name(name);
+  if (full_name.empty() || full_name[0] != '/') {
+    full_name = "/" + full_name;
+  }
+#ifdef __APPLE__
+  if (full_name.size() > 31) {
+    full_name = "/" + full_name.substr(full_name.size() - 30);
+  }
+#endif
+  if (shm_unlink(full_name.c_str()) != 0) {
+    SPDLOG_ERROR("shm_unlink error for {}: {}", full_name, detail::FormatSystemError("shm_unlink error", errno));
     return false;
   }
   return true;

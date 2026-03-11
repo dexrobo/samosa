@@ -336,7 +336,7 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallbackFastProducerFromInit) {
     });
   });
 
-  std::thread monitor_thread([&monitor, &format_regex, &producer_sequence, max_iterations]() {
+  std::thread monitor_thread([&monitor, &format_regex, &producer_sequence]() {
     uint64_t last_sequence_number = 0;
     monitor.Run(
         [&](const test::ArrayBuffer& buffer, uint64_t sequence_number) {

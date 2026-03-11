@@ -1,14 +1,12 @@
 #pragma once
 
 #include <atomic>
-#include <experimental/memory>
 #include <memory>
 
 #include "gsl/pointers"
+#include "dex/infrastructure/shared_memory/observer_ptr.h"
 
 namespace dex::shared_memory::detail {
-
-using std::experimental::observer_ptr;
 
 /// Result of a futex wait operation
 enum class WaitResult {

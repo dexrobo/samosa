@@ -169,7 +169,11 @@ class SharedMemStreamingTest : public testing::Test {
     // Kill producer once consumer is done - ignore if already exited
     if (kill(producer_pid, SIGTERM) == -1 && errno != ESRCH) {
       std::array<char, 256> err_buf = {};
+#ifdef __APPLE__
+      strerror_r(errno, err_buf.data(), err_buf.size());
+#else
       [[maybe_unused]] auto* err_str = strerror_r(errno, err_buf.data(), err_buf.size());
+#endif
       FAIL() << "Failed to send SIGTERM to producer: " << err_buf.data();
     }
 

@@ -2,9 +2,9 @@
 
 // System headers
 #include <csignal>  // for signal, SIGINT, SIGTERM
-#include <experimental/memory>
 
 #include "dex/infrastructure/shared_memory/futex.h"
+#include "dex/infrastructure/shared_memory/observer_ptr.h"
 #include "dex/infrastructure/shared_memory/shared_memory.h"
 #include "dex/infrastructure/shared_memory/streaming_control.h"
 
@@ -60,7 +60,7 @@ inline uint32_t PackSequenceAndWriting(const uint32_t sequence, const bool is_wr
 
 }  // namespace detail
 
-using std::experimental::observer_ptr;
+using detail::observer_ptr;
 
 /**
  * Buffer mechanism for lock-free IPC communication.
