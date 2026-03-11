@@ -1,0 +1,189 @@
+load("@aspect_rules_py//py:defs.bzl", "py_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+# External requirements
+# Note: In standalone MODULE.bazel, these map to their BCR names
+SPDLOG = "@com_github_gabime_spdlog//:spdlog"
+GSL = "@com_github_microsoft_gsl//:gsl"
+GTEST = "@com_google_googletest//:gtest_main"
+BENCHMARK = "@com_github_google_benchmark//:benchmark"
+ABSL_STRINGS = "@com_google_absl//absl/strings"
+
+cc_library(
+    name = "shared_memory_private",
+    srcs = ["shared_memory_private.cc"],
+    hdrs = ["shared_memory_private.h"],
+)
+
+cc_library(
+    name = "shared_memory",
+    srcs = ["shared_memory_impl.h"],
+    hdrs = ["shared_memory.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":shared_memory_private",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_library(
+    name = "futex",
+    srcs = ["futex.cc"],
+    hdrs = ["futex.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":shared_memory_private",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_library(
+    name = "shared_memory_streaming",
+    srcs = [
+        "shared_memory_streaming_impl.h",
+        "streaming_control.cc",
+    ],
+    hdrs = [
+        "shared_memory_streaming.h",
+        "streaming_control.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":futex",
+        ":shared_memory",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_binary(
+    name = "shared_memory_streaming_example",
+    srcs = ["shared_memory_streaming_example.cc"],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_test",
+    size = "small",
+    srcs = ["shared_memory_test.cc"],
+    deps = [
+        ":shared_memory",
+        SPDLOG,
+        GTEST,
+    ],
+)
+
+cc_test(
+    name = "futex_test",
+    size = "small",
+    srcs = ["futex_test.cc"],
+    deps = [
+        ":futex",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "shared_memory_streaming_test_private",
+    hdrs = ["shared_memory_streaming_test_private.h"],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+        GTEST,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_streaming_test",
+    size = "small",
+    srcs = ["shared_memory_streaming_test.cc"],
+    copts = ["-Wno-stringop-overflow"],
+    flaky = True,
+    deps = [
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_streaming_delay_test",
+    size = "small",
+    srcs = ["shared_memory_streaming_delay_test.cc"],
+    copts = ["-Wno-stringop-overflow"],
+    flaky = True,
+    deps = [
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)
+
+cc_binary(
+    name = "shared_memory_streaming_benchmark",
+    srcs = ["shared_memory_streaming_benchmark.cc"],
+    copts = ["-Wno-stringop-overflow"],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+        BENCHMARK,
+    ],
+)
+
+py_binary(
+    name = "format_benchmark_stats",
+    srcs = ["format_benchmark_stats.py"],
+    # Removed dex-specific requirement() macro
+)
+
+sh_binary(
+    name = "run_benchmark_with_stats",
+    srcs = ["run_benchmark_with_stats.sh"],
+    args = [
+        "$(rootpath :shared_memory_streaming_benchmark)",
+        "$(rootpath :format_benchmark_stats)",
+    ],
+    data = [
+        ":format_benchmark_stats",
+        ":shared_memory_streaming_benchmark",
+    ],
+)
+
+cc_library(
+    name = "shared_memory_monitor",
+    srcs = ["shared_memory_monitor_impl.h"],
+    hdrs = ["shared_memory_monitor.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":futex",
+        ":shared_memory",
+        ":shared_memory_streaming",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_monitor_test",
+    size = "small",
+    srcs = ["shared_memory_monitor_test.cc"],
+    flaky = True,
+    deps = [
+        ":shared_memory_monitor",
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)

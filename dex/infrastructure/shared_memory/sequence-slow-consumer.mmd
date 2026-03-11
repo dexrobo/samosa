@@ -1,0 +1,46 @@
+sequenceDiagram
+    participant P as Producer
+    participant SM as Shared Memory
+    participant C as Consumer
+
+    Note over P,C: Initialization Phase
+    P->>SM: openSharedBuffer(create=true)
+    C->>SM: openSharedBuffer(create=false)
+    
+    Note over P,C: Initial Sync
+    C->>SM: read_idx = 0
+    C->>SM: futex_wait(write_idx)
+    P->>SM: Check read_idx = 0
+    Note over P: Write to buffer[0]
+    P->>SM: write_idx = 0
+    P->>SM: futex_wake(write_idx)
+    
+    Note over P,C: First Consumer Cycle
+    Note over P: Write to buffer[0] (overwrite)
+    Note over P: Write to buffer[0] (overwrite)
+    C->>SM: read_idx = 1
+    C->>SM: futex_wait(write_idx)
+    Note over P: Write to buffer[1]
+    P->>SM: write_idx = 1
+    P->>SM: futex_wake(write_idx)
+    Note over C: Reading buffer[0] (slow)
+    
+    Note over P,C: Second Consumer Cycle
+    Note over P: Write to buffer[1] (overwrite)
+    Note over P: Write to buffer[1] (overwrite)
+    C->>SM: read_idx = 2
+    C->>SM: futex_wait(write_idx)
+    Note over P: Write to buffer[0]
+    P->>SM: write_idx = 2
+    P->>SM: futex_wake(write_idx)
+    Note over C: Reading buffer[1] (slow)
+    
+    Note over P,C: Third Consumer Cycle
+    Note over P: Write to buffer[0] (overwrite)
+    Note over P: Write to buffer[0] (overwrite)
+    C->>SM: read_idx = 1
+    C->>SM: futex_wait(write_idx)
+    Note over P: Write to buffer[1]
+    P->>SM: write_idx = 1
+    P->>SM: futex_wake(write_idx)
+    Note over C: Reading buffer[0] (slow) 

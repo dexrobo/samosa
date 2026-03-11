@@ -1,0 +1,49 @@
+stateDiagram-v2
+    [*] --> SharedMemCreated: create mode
+    SharedMemCreated --> InitialSync
+
+    state InitialSync {
+        ConsumerWaiting: consumerLoop waiting
+        PublisherFirst: produceFrame
+        ConsumerWaiting --> PublisherFirst: futex_wait
+        PublisherFirst --> SyncComplete: futex_wake
+    }
+
+    state SteadyState {
+        BufferA: Buffer A (idx=1)
+        BufferB: Buffer B (idx=2)
+        BufferA --> BufferB: Producer writes
+        BufferB --> BufferA: Producer writes
+        
+        state ConsumerRead {
+            ReadA: read_idx=1
+            ReadB: read_idx=2
+            ReadA --> ReadB: consumeFrame
+            ReadB --> ReadA: consumeFrame
+        }
+    }
+    
+    InitialSync --> SteadyState
+    SteadyState --> Termination: SIGINT
+
+    state Termination {
+        PublisherExit: running=false
+        ConsumerExit: running=false
+    }
+    
+    Termination --> [*]: destroy mode
+
+    note right of SharedMemCreated
+        Shared Memory Layout:
+        - write_idx (atomic)
+        - read_idx (atomic)
+        - buffers[2] array
+    end note
+
+    note right of SteadyState
+        Double Buffer Protocol:
+        1. Producer writes to unused buffer
+        2. Updates write_idx
+        3. Consumer reads from write_idx buffer
+        4. Updates read_idx
+    end note
