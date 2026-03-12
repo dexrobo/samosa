@@ -4,7 +4,7 @@ load("@rules_python//python:defs.bzl", "py_binary")
 package(default_visibility = ["//visibility:public"])
 
 py_binary(
-    name = "mypy_bin",
+    name = "mypy",
     srcs = ["mypy_main.py"],
     data = ["//dex/infrastructure/shared_memory:format_benchmark_stats"],
     main = "mypy_main.py",

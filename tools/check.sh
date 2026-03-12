@@ -32,7 +32,7 @@ bazel build --config=lint //...
 log "Running MyPy type checker..."
 # We run against the package directory.
 # MyPy will find the files in the runfiles if they are provided as data.
-bazel run //tools/lint:mypy_bin -- dex/infrastructure/shared_memory
+bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
 
 # 4. Production Tests
 log "Running production tests..."
