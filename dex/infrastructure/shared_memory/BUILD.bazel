@@ -2,6 +2,8 @@ load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
+package(default_visibility = ["//visibility:public"])
+
 # External requirements
 # Note: In standalone MODULE.bazel, these map to their BCR names
 SPDLOG = "@com_github_gabime_spdlog//:spdlog"

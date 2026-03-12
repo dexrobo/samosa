@@ -4,15 +4,6 @@ load("@rules_python//python:defs.bzl", "py_binary")
 package(default_visibility = ["//visibility:public"])
 
 py_binary(
-    name = "mypy",
-    srcs = ["mypy_main.py"],
-    main = "mypy_main.py",
-    deps = [
-        requirement("mypy"),
-    ],
-)
-
-py_binary(
     name = "ruff",
     srcs = ["ruff_main.py"],
     main = "ruff_main.py",
