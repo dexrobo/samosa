@@ -2,13 +2,30 @@
 """Format benchmark statistics from detailed per-frame CSV measurements."""
 
 import argparse
-import sys
 import csv
+import logging
 import math
+import sys
 from collections import defaultdict
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 
-def calculate_stats(values):
+def calculate_stats(values: list[float]) -> dict[str, float] | None:
+    """
+    Calculate basic statistics for a list of values.
+
+    Args:
+        values: List of numeric values to analyze.
+
+    Returns:
+        Dictionary containing mean, stddev, cv, min, max, median, and percentiles,
+        or None if the input list is empty.
+    ```
+    """
     if not values:
         return None
 
@@ -20,7 +37,7 @@ def calculate_stats(values):
 
     sorted_values = sorted(values)
 
-    def get_quantile(q):
+    def get_quantile(q: float) -> float:
         idx = min(int(n * q), n - 1)
         return sorted_values[idx]
 
@@ -38,10 +55,15 @@ def calculate_stats(values):
 
 
 def format_benchmark_stats(input_file: str) -> None:
-    """Format benchmark statistics from detailed per-frame CSV measurements."""
+    """
+    Format benchmark statistics from detailed per-frame CSV measurements.
+
+    Args:
+        input_file: Path to the CSV file containing per-frame measurements.
+    """
     try:
         data = []
-        with open(input_file, "r") as f:
+        with Path(input_file).open() as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Convert numeric fields
@@ -49,11 +71,11 @@ def format_benchmark_stats(input_file: str) -> None:
                 data.append(processed_row)
 
         if not data:
-            print("No data found in input file.")
+            logger.warning("No data found in input file: %s", input_file)
             return
 
         # Group by frame_interval and num_frames
-        groups = defaultdict(list)
+        groups: dict[tuple[int, int], list[dict[str, float]]] = defaultdict(list)
         for row in data:
             key = (int(row["frame_interval"]), int(row["num_frames"]))
             groups[key].append(row)
@@ -80,25 +102,30 @@ def format_benchmark_stats(input_file: str) -> None:
             }
 
             print("-" * 80)
-            headers = ["metric", "mean", "stddev", "cv (%)", "min", "max", "median", "99th", "99.9th"]
-            print(
-                f"{headers[0]:<25} {headers[1]:>10} {headers[2]:>10} {headers[3]:>10} {headers[4]:>10} {headers[5]:>10} {headers[6]:>10} {headers[7]:>10}"
+            headers = ["metric", "mean", "stddev", "cv (%)", "min", "max", "median", "99th"]
+            fmt_str = (
+                f"{headers[0]:<25} {headers[1]:>10} {headers[2]:>10} {headers[3]:>10} "
+                f"{headers[4]:>10} {headers[5]:>10} {headers[6]:>10} {headers[7]:>10}"
             )
+            print(fmt_str)
 
             for metric, values in metrics.items():
                 s = calculate_stats(values)
                 if s:
-                    print(
-                        f"{metric:<25} {s['mean']:>10.1f} {s['stddev']:>10.1f} {s['cv (%)']:>10.1f} {s['min']:>10.1f} {s['max']:>10.1f} {s['median']:>10.1f} {s['99th']:>10.1f}"
+                    res_str = (
+                        f"{metric:<25} {s['mean']:>10.1f} {s['stddev']:>10.1f} {s['cv (%)']:>10.1f} "
+                        f"{s['min']:>10.1f} {s['max']:>10.1f} {s['median']:>10.1f} {s['99th']:>10.1f}"
                     )
+                    print(res_str)
             print("-" * 80)
 
     except Exception as e:
-        print(f"Error processing benchmark data: {e}", file=sys.stderr)
+        logger.exception("Error processing benchmark data: %s", e)
         sys.exit(1)
 
 
 def main() -> None:
+    """Entry point for the benchmark statistics formatter."""
     parser = argparse.ArgumentParser(description="Format detailed benchmark statistics from per-frame measurements")
     parser.add_argument("input_file", help="Input CSV file with per-frame measurements")
     args = parser.parse_args()

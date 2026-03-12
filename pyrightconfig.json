@@ -1,0 +1,10 @@
+{
+  "include": ["dex"],
+  "exclude": [
+    "**/__pycache__",
+    "**/.venv",
+    "bazel-*"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "strict"
+}
