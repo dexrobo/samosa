@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     libxml2 \
+    nodejs \
+    npm \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Bazelisk

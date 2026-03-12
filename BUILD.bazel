@@ -60,6 +60,21 @@ alias(
     actual = "//tools/format:buildifier",
 )
 
+alias(
+    name = "format_toml",
+    actual = "//tools/format:taplo_bin",
+)
+
+alias(
+    name = "format_yaml",
+    actual = "//tools/format:yamlfmt_bin",
+)
+
+alias(
+    name = "format_markdown",
+    actual = "//tools/format:markdownlint",
+)
+
 exports_files([
     ".clang-tidy",
     ".ruff.toml",

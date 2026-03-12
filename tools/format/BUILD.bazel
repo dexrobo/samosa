@@ -13,9 +13,16 @@ alias(
     actual = "@buildifier_prebuilt//:buildifier",
 )
 
-alias(
-    name = "yamlfmt",
-    actual = "@multitool//tools/yamlfmt",
+# Yamlfmt selection
+genrule(
+    name = "yamlfmt_bin",
+    srcs = select({
+        "@platforms//os:osx": ["@yamlfmt_darwin_arm64//:yamlfmt"],
+        "//conditions:default": ["@yamlfmt_linux_arm64//:yamlfmt"],
+    }),
+    outs = ["yamlfmt"],
+    cmd = "cp $< $@",
+    executable = True,
 )
 
 # Taplo selection
@@ -30,6 +37,16 @@ genrule(
     executable = True,
 )
 
+# Markdownlint selection
+sh_binary(
+    name = "markdownlint",
+    srcs = ["markdownlint.sh"],
+    data = [
+        "@bazel_tools//tools/bash/runfiles",
+        "@markdownlint-cli2//:pkg",
+    ],
+)
+
 sh_binary(
     name = "clang_format",
     srcs = ["clang_format.sh"],
@@ -42,8 +59,9 @@ sh_binary(
 format_multirun(
     name = "format",
     cc = ":clang_format",
+    markdown = ":markdownlint",
     python = ":ruff",
     starlark = ":buildifier",
     toml = ":taplo_bin",
-    yaml = ":yamlfmt",
+    yaml = ":yamlfmt_bin",
 )

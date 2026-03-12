@@ -43,15 +43,41 @@ format_tools = use_extension("@aspect_rules_lint//format:extensions.bzl", "tools
 format_tools.taplo()
 use_repo(format_tools, "taplo", "taplo_mac")
 
+bazel_dep(name = "rules_nodejs", version = "6.3.3")
+
+node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node")
+node.toolchain(node_version = "20.11.1")
+
+bazel_dep(name = "aspect_rules_js", version = "2.2.0")
+
+npm = use_extension("@aspect_rules_js//npm:extensions.bzl", "npm")
+npm.npm_import(
+    name = "markdownlint-cli2",
+    integrity = "sha512-XH06ZOi8wCrtOSSj3p8y3yJzwgzYOSa7lglNyS3fP05JPRzRGyjauBb5UvlLUSCGysMmULS1moxdRHHudV+g/Q==",
+    package = "markdownlint-cli2",
+    version = "0.17.2",
+)
+use_repo(npm, "markdownlint-cli2")
+
 bazel_dep(name = "abseil-cpp", version = "20240722.0", repo_name = "com_google_absl")
 bazel_dep(name = "googletest", version = "1.15.2", repo_name = "com_google_googletest")
 bazel_dep(name = "google_benchmark", version = "1.9.1", repo_name = "com_github_google_benchmark")
 bazel_dep(name = "spdlog", version = "1.17.0", repo_name = "com_github_gabime_spdlog")
 bazel_dep(name = "fmt", version = "12.1.0", repo_name = "com_github_fmtlib_fmt")
 
-# Custom multitool for basedpyright and yamlfmt
-bazel_dep(name = "rules_multitool", version = "1.0.0")
+# Prebuilt binaries
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
 
-multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
-multitool.hub(lockfile = "@@//tools/lint:multitool.lock.json")
-use_repo(multitool, "multitool")
+http_archive(
+    name = "yamlfmt_linux_arm64",
+    build_file_content = """exports_files(["yamlfmt"])""",
+    sha256 = "5b2689c963b177271330c5ce8ca7396751107e5a826be46f03d2cb9b6f0c7784",
+    url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Linux_arm64.tar.gz",
+)
+
+http_archive(
+    name = "yamlfmt_darwin_arm64",
+    build_file_content = """exports_files(["yamlfmt"])""",
+    sha256 = "4b417ecb94339d57e4c122ecc948c1a00fe328b5853266de9806e652a92858fa",
+    url = "https://github.com/google/yamlfmt/releases/download/v0.21.0/yamlfmt_0.21.0_Darwin_arm64.tar.gz",
+)
