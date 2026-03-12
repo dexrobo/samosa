@@ -13,6 +13,23 @@ alias(
     actual = "@buildifier_prebuilt//:buildifier",
 )
 
+alias(
+    name = "yamlfmt",
+    actual = "@multitool//tools/yamlfmt",
+)
+
+# Taplo selection
+genrule(
+    name = "taplo_bin",
+    srcs = select({
+        "@platforms//os:osx": ["@taplo_mac//file"],
+        "//conditions:default": ["@taplo//file"],
+    }),
+    outs = ["taplo_executable"],
+    cmd = "gunzip -c $< > $@",
+    executable = True,
+)
+
 sh_binary(
     name = "clang_format",
     srcs = ["clang_format.sh"],
@@ -27,4 +44,6 @@ format_multirun(
     cc = ":clang_format",
     python = ":ruff",
     starlark = ":buildifier",
+    toml = ":taplo_bin",
+    yaml = ":yamlfmt",
 )

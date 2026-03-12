@@ -21,6 +21,8 @@ llvm.toolchain(
 )
 use_repo(llvm, "llvm_toolchain", "llvm_toolchain_llvm")
 
+register_toolchains("@llvm_toolchain//:all")
+
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
 python.toolchain(
     configure_coverage_tool = True,
@@ -36,8 +38,20 @@ pip.parse(
 )
 use_repo(pip, "python_deps")
 
+# aspect_rules_lint formatters
+format_tools = use_extension("@aspect_rules_lint//format:extensions.bzl", "tools")
+format_tools.taplo()
+use_repo(format_tools, "taplo", "taplo_mac")
+
 bazel_dep(name = "abseil-cpp", version = "20240722.0", repo_name = "com_google_absl")
 bazel_dep(name = "googletest", version = "1.15.2", repo_name = "com_google_googletest")
 bazel_dep(name = "google_benchmark", version = "1.9.1", repo_name = "com_github_google_benchmark")
 bazel_dep(name = "spdlog", version = "1.17.0", repo_name = "com_github_gabime_spdlog")
 bazel_dep(name = "fmt", version = "12.1.0", repo_name = "com_github_fmtlib_fmt")
+
+# Custom multitool for basedpyright and yamlfmt
+bazel_dep(name = "rules_multitool", version = "1.0.0")
+
+multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
+multitool.hub(lockfile = "@@//tools/lint:multitool.lock.json")
+use_repo(multitool, "multitool")

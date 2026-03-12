@@ -63,4 +63,5 @@ alias(
 exports_files([
     ".clang-tidy",
     ".ruff.toml",
+    ".aspectignore",
 ])
