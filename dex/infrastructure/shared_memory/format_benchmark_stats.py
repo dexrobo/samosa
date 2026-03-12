@@ -7,17 +7,19 @@ import csv
 import math
 from collections import defaultdict
 
+
 def calculate_stats(values):
     if not values:
         return None
-    
+
     n = len(values)
     mean = sum(values) / n
     variance = sum((x - mean) ** 2 for x in values) / n
     stddev = math.sqrt(variance)
-    cv = (stddev / mean * 100) if mean != 0 else float('nan')
-    
+    cv = (stddev / mean * 100) if mean != 0 else float("nan")
+
     sorted_values = sorted(values)
+
     def get_quantile(q):
         idx = min(int(n * q), n - 1)
         return sorted_values[idx]
@@ -34,11 +36,12 @@ def calculate_stats(values):
         "99.99th": get_quantile(0.9999),
     }
 
+
 def format_benchmark_stats(input_file: str) -> None:
     """Format benchmark statistics from detailed per-frame CSV measurements."""
     try:
         data = []
-        with open(input_file, 'r') as f:
+        with open(input_file, "r") as f:
             reader = csv.DictReader(f)
             for row in reader:
                 # Convert numeric fields
@@ -78,12 +81,16 @@ def format_benchmark_stats(input_file: str) -> None:
 
             print("-" * 80)
             headers = ["metric", "mean", "stddev", "cv (%)", "min", "max", "median", "99th", "99.9th"]
-            print(f"{headers[0]:<25} {headers[1]:>10} {headers[2]:>10} {headers[3]:>10} {headers[4]:>10} {headers[5]:>10} {headers[6]:>10} {headers[7]:>10}")
-            
+            print(
+                f"{headers[0]:<25} {headers[1]:>10} {headers[2]:>10} {headers[3]:>10} {headers[4]:>10} {headers[5]:>10} {headers[6]:>10} {headers[7]:>10}"
+            )
+
             for metric, values in metrics.items():
                 s = calculate_stats(values)
                 if s:
-                    print(f"{metric:<25} {s['mean']:>10.1f} {s['stddev']:>10.1f} {s['cv (%)']:>10.1f} {s['min']:>10.1f} {s['max']:>10.1f} {s['median']:>10.1f} {s['99th']:>10.1f}")
+                    print(
+                        f"{metric:<25} {s['mean']:>10.1f} {s['stddev']:>10.1f} {s['cv (%)']:>10.1f} {s['min']:>10.1f} {s['max']:>10.1f} {s['median']:>10.1f} {s['99th']:>10.1f}"
+                    )
             print("-" * 80)
 
     except Exception as e:

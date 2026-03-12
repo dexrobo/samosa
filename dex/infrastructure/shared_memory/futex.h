@@ -68,7 +68,7 @@ class FutexManager {
   }
 
   // Add destructor to clean up the default futex
-  ~FutexManager() {
+  ~FutexManager() {  // NOLINT(modernize-use-equals-default)
     futex_.reset();
     previous_futex_.reset();
   }

@@ -6,3 +6,8 @@ build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 # Common flags
 build --strip=never
 build --test_output=errors
+
+# Lint config
+build:lint --aspects=//tools/lint:linters.bzl%ruff
+build:lint --output_groups=rules_lint_report
+build:lint //dex/infrastructure/shared_memory/...

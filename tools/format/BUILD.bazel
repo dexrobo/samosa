@@ -1,0 +1,30 @@
+load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+alias(
+    name = "ruff",
+    actual = "@aspect_rules_lint//format:ruff",
+)
+
+alias(
+    name = "buildifier",
+    actual = "@buildifier_prebuilt//:buildifier",
+)
+
+sh_binary(
+    name = "clang_format",
+    srcs = ["clang_format.sh"],
+    data = [
+        "@bazel_tools//tools/bash/runfiles",
+        "@llvm_toolchain_llvm//:bin/clang-format",
+    ],
+)
+
+format_multirun(
+    name = "format",
+    cc = ":clang_format",
+    python = ":ruff",
+    starlark = ":buildifier",
+)

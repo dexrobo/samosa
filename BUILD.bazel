@@ -1,3 +1,28 @@
+exports_files([
+    ".clang-tidy",
+    ".ruff.toml",
+])
+
+alias(
+    name = "format",
+    actual = "//tools/format",
+)
+
+alias(
+    name = "format_cc",
+    actual = "//tools/format:clang_format",
+)
+
+alias(
+    name = "format_py",
+    actual = "//tools/format:ruff",
+)
+
+alias(
+    name = "format_starlark",
+    actual = "//tools/format:buildifier",
+)
+
 config_setting(
     name = "asan_config",
     values = {"define": "asan=true"},
