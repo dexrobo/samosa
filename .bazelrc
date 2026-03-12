@@ -3,6 +3,20 @@ build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
 build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 
+# Linux-specific defaults (using system GCC)
+build:linux --repo_env=CC=gcc
+build:linux --repo_env=GCOV=gcov
+
+# macOS-specific defaults (applied only on macOS via build:macos)
+build:macos --repo_env=CC=clang
+build:macos --copt=-stdlib=libstdc++
+build:macos --cxxopt=-stdlib=libstdc++
+build:macos --linkopt=-stdlib=libstdc++
+build:macos --copt=-fexperimental-library
+build:macos --cxxopt=-fexperimental-library
+build:macos --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL
+build:macos --cxxopt=-D_LIBCPP_ENABLE_EXPERIMENTAL
+
 # Strict warning flags from core repo
 build --per_file_copt=^dex/.*,^tools/.*@-Werror
 build --per_file_copt=^dex/.*,^tools/.*@-Wall
@@ -13,8 +27,68 @@ build --copt=-Wno-unused-parameter
 build --strip=never
 build --test_output=errors
 
+# prod config for optimized release builds.
+build:prod --compilation_mode opt
+build:prod --platform_suffix prod
+build:prod --copt=-O3
+test:prod --test_timeout 60,300,900,3600
+
+# dbg config for debugging.
+build:dbg --compilation_mode dbg
+build:dbg --platform_suffix dbg
+
+# asan config for address sanitizer.
+build:asan-dynamic --compilation_mode dbg
+build:asan-dynamic --platform_suffix asan-dynamic
+build:asan-dynamic --copt=-fsanitize=address
+build:asan-dynamic --linkopt=-fsanitize=address
+test:asan-dynamic --test_timeout 600,1200,3600,3600
+
+build:asan --compilation_mode dbg
+build:asan --platform_suffix asan
+build:asan --linkopt=-Wl,--no-as-needed
+build:asan --linkopt=-fsanitize=address
+build:asan --linkopt=-static-libasan
+build:asan --linkopt=-Wl,--as-needed
+test:asan --test_timeout 600,1200,3600,3600
+
+# tsan config for thread sanitizer.
+build:tsan-dynamic --compilation_mode dbg
+build:tsan-dynamic --platform_suffix tsan-dynamic
+build:tsan-dynamic --copt=-fsanitize=thread
+build:tsan-dynamic --linkopt=-fsanitize=thread
+build:tsan-dynamic --copt=-Wno-tsan
+test:tsan-dynamic --test_env=TSAN_OPTIONS=report_atomic_races=0
+test:tsan-dynamic --test_timeout 600,1200,3600,3600
+test:tsan-dynamic --run_under="setarch aarch64 -R"
+
+build:tsan --config=tsan-dynamic
+build:tsan --platform_suffix tsan
+build:tsan --linkopt=-static-libtsan
+test:tsan --test_timeout 600,1200,3600,3600
+test:tsan --run_under="setarch aarch64 -R"
+
+# ubsan config for undefined behavior sanitizer.
+build:ubsan --compilation_mode dbg
+build:ubsan --platform_suffix ubsan
+build:ubsan --copt=-fsanitize=undefined
+build:ubsan --linkopt=-fsanitize=undefined
+build:ubsan --copt=-fno-sanitize=null,returns-nonnull-attribute,nonnull-attribute
+
+# perf config for performance profiling.
+build:perf --compilation_mode opt
+build:perf --platform_suffix perf
+build:perf --copt=-O3
+build:perf --copt=-g
+build:perf --copt=-fno-omit-frame-pointer
+
+# gcov config for coverage.
+build:gcov --platform_suffix gcov
+build:gcov --collect_code_coverage
+build:gcov --combined_report lcov
+build:gcov --instrumentation_filter "^//dex[/:]"
+
 # Lint config
-# Note: basedpyright is run via bazel run //tools/lint:basedpyright
 build:lint --aspects=//tools/lint:linters.bzl%ruff
 build:lint --output_groups=rules_lint_report
 build:lint //dex/infrastructure/shared_memory/...

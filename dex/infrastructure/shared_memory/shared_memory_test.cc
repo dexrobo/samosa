@@ -107,6 +107,7 @@ class SystemCallFixture : public SharedMemoryTest {
 };
 
 // System call overrides
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 extern "C" {
 int shm_open(const char* name, int oflag, mode_t mode) { return syscall_controls.ShmOpen(name, oflag, mode); }
 
@@ -116,6 +117,7 @@ void* mmap(void* addr, size_t len, int prot, int flags, int fd, off_t offset) {
   return syscall_controls.Mmap(addr, len, prot, flags, fd, offset);
 }
 }
+#endif
 
 TEST_F(SharedMemoryTest, Create) {
   const SharedArrayBuffer shared_memory = SharedArrayBuffer::Create(shared_memory_name_);
@@ -182,6 +184,7 @@ TEST_F(SharedMemoryTest, GetBufferByState) {
   EXPECT_EQ(buffer, nullptr);
 }
 
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 TEST_F(SystemCallFixture, HandlesShmOpenFailure) {
   syscall_controls.GetState().should_fail_shm_open = true;
   const SharedArrayBuffer shared_memory = SharedArrayBuffer::Create(shared_memory_name_);
@@ -199,6 +202,7 @@ TEST_F(SystemCallFixture, HandlesMmapFailure) {
   const SharedArrayBuffer shared_memory = SharedArrayBuffer::Create(shared_memory_name_);
   EXPECT_FALSE(shared_memory.IsValid());
 }
+#endif
 
 TEST_F(SharedMemoryTest, SizeMismatch) {
   using SharedSmallMemory = dex::shared_memory::SharedMemory<std::array<char, 64>, 2, SharedMemoryBuffer>;

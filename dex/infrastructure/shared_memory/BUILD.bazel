@@ -1,17 +1,13 @@
-load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 # External requirements
 # Note: In standalone MODULE.bazel, these map to their BCR names
 SPDLOG = "@com_github_gabime_spdlog//:spdlog"
-
 GSL = "@com_github_microsoft_gsl//:gsl"
-
 GTEST = "@com_google_googletest//:gtest_main"
-
 BENCHMARK = "@com_github_google_benchmark//:benchmark"
-
 ABSL_STRINGS = "@com_google_absl//absl/strings"
 
 cc_library(
@@ -118,6 +114,13 @@ cc_test(
     copts = ["-Wno-stringop-overflow"],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:asan_dynamic_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":shared_memory_streaming",
         ":shared_memory_streaming_test_private",
@@ -127,6 +130,8 @@ cc_test(
     ],
 )
 
+# This test runs a suite of tests with variable delays.
+# This could take a long time to run with sanitizers.
 cc_test(
     name = "shared_memory_streaming_delay_test",
     size = "small",
@@ -144,9 +149,11 @@ cc_test(
     flaky = True,
     target_compatible_with = select({
         "//:asan_config": ["@platforms//:incompatible"],
+        "//:asan_dynamic_config": ["@platforms//:incompatible"],
         # TODO: Frequently fails in coverage job even though it is marked flaky
         "//:gcov_config": ["@platforms//:incompatible"],
         "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
     deps = [
@@ -172,7 +179,6 @@ cc_binary(
 py_binary(
     name = "format_benchmark_stats",
     srcs = ["format_benchmark_stats.py"],
-    # Removed dex-specific requirement() macro
 )
 
 sh_binary(

@@ -1,7 +1,44 @@
-exports_files([
-    ".clang-tidy",
-    ".ruff.toml",
-])
+load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
+
+config_setting(
+    name = "asan_config",
+    values = {"platform_suffix": "asan"},
+)
+
+config_setting(
+    name = "asan_dynamic_config",
+    values = {"platform_suffix": "asan-dynamic"},
+)
+
+config_setting(
+    name = "tsan_config",
+    values = {"platform_suffix": "tsan"},
+)
+
+config_setting(
+    name = "tsan_dynamic_config",
+    values = {"platform_suffix": "tsan-dynamic"},
+)
+
+config_setting(
+    name = "ubsan_config",
+    values = {"platform_suffix": "ubsan"},
+)
+
+config_setting(
+    name = "gcov_config",
+    values = {"platform_suffix": "gcov"},
+)
+
+config_setting(
+    name = "prod_config",
+    values = {"platform_suffix": "prod"},
+)
+
+config_setting(
+    name = "ci_config",
+    values = {"define": "ci=true"},
+)
 
 alias(
     name = "format",
@@ -23,22 +60,7 @@ alias(
     actual = "//tools/format:buildifier",
 )
 
-config_setting(
-    name = "asan_config",
-    values = {"define": "asan=true"},
-)
-
-config_setting(
-    name = "tsan_config",
-    values = {"define": "tsan=true"},
-)
-
-config_setting(
-    name = "gcov_config",
-    values = {"define": "gcov=true"},
-)
-
-config_setting(
-    name = "ci_config",
-    values = {"define": "ci=true"},
-)
+exports_files([
+    ".clang-tidy",
+    ".ruff.toml",
+])
