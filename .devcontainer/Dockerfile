@@ -10,6 +10,8 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     gcc-12 \
     g++-12 \
+    python3 \
+    nodejs \
     git \
     wget \
     libxml2 \
