@@ -3,28 +3,21 @@ FROM ubuntu:jammy
 # Avoid prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies
+# Install dependencies and Bazelisk in a single layer
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     build-essential \
-    python3 \
-    python3-pip \
+    gcc-12 \
+    g++-12 \
     git \
     wget \
     libxml2 \
-    nodejs \
-    npm \
+    sudo \
+    && ARCH=$(dpkg --print-architecture) && \
+    curl -Lo /usr/local/bin/bazel "https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-${ARCH}" && \
+    chmod +x /usr/local/bin/bazel \
     && rm -rf /var/lib/apt/lists/*
-
-# Install Bazelisk
-RUN ARCH=$(dpkg --print-architecture) && \
-    if [ "$ARCH" = "amd64" ]; then \
-        curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64; \
-    elif [ "$ARCH" = "arm64" ]; then \
-        curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-arm64; \
-    fi && \
-    chmod +x /usr/local/bin/bazel
 
 # Create a non-root user
 ARG USERNAME=vscode
@@ -33,8 +26,6 @@ ARG USER_GID=$USER_UID
 
 RUN groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
-    && apt-get update \
-    && apt-get install -y sudo \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \
     && chmod 0440 /etc/sudoers.d/$USERNAME
 

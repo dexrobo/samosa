@@ -4,8 +4,8 @@ build --host_cxxopt=-std=c++20
 build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 
 # Linux-specific defaults (using system GCC)
-build:linux --repo_env=CC=gcc
-build:linux --repo_env=GCOV=gcov
+build:linux --repo_env=CC=gcc-12
+build:linux --repo_env=GCOV=gcov-12
 build:linux --copt=-fexperimental-library
 build:linux --cxxopt=-fexperimental-library
 build:linux --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL
