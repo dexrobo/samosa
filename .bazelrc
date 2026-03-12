@@ -10,14 +10,9 @@ build:linux --copt=-fexperimental-library
 build:linux --cxxopt=-fexperimental-library
 build:linux --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL
 build:linux --cxxopt=-D_LIBCPP_ENABLE_EXPERIMENTAL
-build:linux --copt=-Wno-unused-parameter
-build:linux --cxxopt=-Wno-unused-parameter
 
 # macOS-specific defaults (applied only on macOS via build:macos)
 build:macos --repo_env=CC=clang
-build:macos --copt=-stdlib=libstdc++
-build:macos --cxxopt=-stdlib=libstdc++
-build:macos --linkopt=-stdlib=libstdc++
 build:macos --copt=-fexperimental-library
 build:macos --cxxopt=-fexperimental-library
 build:macos --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL

@@ -3,6 +3,8 @@
 This library provides a simple interface for creating and using shared memory for inter-process communication (IPC).
 
 ## Usage
+> [!IMPORTANT] TODO: Fix usage examples to match the actual public API (SharedMemory::Create/Open, etc.).
+
 First, define the data-structure that you want to publish and consume.
 ```cpp
 struct FrameBuffer {

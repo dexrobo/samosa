@@ -24,7 +24,6 @@ cc_library(
     name = "shared_memory",
     srcs = ["shared_memory_impl.h"],
     hdrs = ["shared_memory.h"],
-    copts = ["-Wno-unused-parameter"],
     visibility = ["//visibility:public"],
     deps = [
         ":shared_memory_private",
@@ -37,7 +36,6 @@ cc_library(
     name = "futex",
     srcs = ["futex.cc"],
     hdrs = ["futex.h"],
-    copts = ["-Wno-unused-parameter"],
     visibility = ["//visibility:public"],
     deps = [
         ":shared_memory_private",
@@ -56,7 +54,6 @@ cc_library(
         "shared_memory_streaming.h",
         "streaming_control.h",
     ],
-    copts = ["-Wno-unused-parameter"],
     visibility = ["//visibility:public"],
     deps = [
         ":futex",
@@ -69,7 +66,6 @@ cc_library(
 cc_binary(
     name = "shared_memory_streaming_example",
     srcs = ["shared_memory_streaming_example.cc"],
-    copts = ["-Wno-unused-parameter"],
     deps = [
         ":shared_memory_streaming",
         SPDLOG,
@@ -80,7 +76,6 @@ cc_test(
     name = "shared_memory_test",
     size = "small",
     srcs = ["shared_memory_test.cc"],
-    copts = ["-Wno-unused-parameter"],
     # This test intercepts system calls using dlsym(RTLD_NEXT, ...), which doesn't work with
     # static sanitizers. Use --config=asan_dynamic or --config=tsan_dynamic instead of
     # --config=asan or --config=tsan to test with sanitizers.
@@ -100,7 +95,6 @@ cc_test(
     name = "futex_test",
     size = "small",
     srcs = ["futex_test.cc"],
-    copts = ["-Wno-unused-parameter"],
     deps = [
         ":futex",
         GTEST,
@@ -110,7 +104,6 @@ cc_test(
 cc_library(
     name = "shared_memory_streaming_test_private",
     hdrs = ["shared_memory_streaming_test_private.h"],
-    copts = ["-Wno-unused-parameter"],
     deps = [
         ":shared_memory_streaming",
         SPDLOG,
@@ -124,7 +117,6 @@ cc_test(
     srcs = ["shared_memory_streaming_test.cc"],
     copts = [
         "-Wno-stringop-overflow",
-        "-Wno-unused-parameter",
     ],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
@@ -152,7 +144,6 @@ cc_test(
     srcs = ["shared_memory_streaming_delay_test.cc"],
     copts = [
         "-Wno-stringop-overflow",
-        "-Wno-unused-parameter",
     ],
     env = select({
         "//:ci_config": {
@@ -187,7 +178,6 @@ cc_binary(
     srcs = ["shared_memory_streaming_benchmark.cc"],
     copts = [
         "-Wno-stringop-overflow",
-        "-Wno-unused-parameter",
     ],
     deps = [
         ":shared_memory_streaming",
@@ -218,7 +208,6 @@ cc_library(
     name = "shared_memory_monitor",
     srcs = ["shared_memory_monitor_impl.h"],
     hdrs = ["shared_memory_monitor.h"],
-    copts = ["-Wno-unused-parameter"],
     visibility = ["//visibility:public"],
     deps = [
         ":futex",
@@ -233,7 +222,6 @@ cc_test(
     name = "shared_memory_monitor_test",
     size = "small",
     srcs = ["shared_memory_monitor_test.cc"],
-    copts = ["-Wno-unused-parameter"],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
     deps = [

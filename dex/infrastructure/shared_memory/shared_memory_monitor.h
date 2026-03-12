@@ -84,6 +84,8 @@ class Monitor {
    * @param writing_mode How to handle the case when producer is writing
    * @param timeout_sec Maximum time to wait for new data in seconds
    * @param max_iterations Maximum number of iterations (0 for unlimited)
+   *
+   * TODO: Support monitor_fn with 1 argument. Current implementation only supports 2.
    */
   void Run(auto&& monitor_fn, double timeout_sec = 0.1, uint max_iterations = 0,
            MonitorReadMode read_mode = MonitorReadMode::ReadDuringProducerWrite)
