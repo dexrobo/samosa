@@ -13,16 +13,14 @@ alias(
     actual = "@buildifier_prebuilt//:buildifier",
 )
 
-# Yamlfmt selection
-genrule(
-    name = "yamlfmt_bin",
-    srcs = select({
-        "@platforms//os:osx": ["@yamlfmt_darwin_arm64//:yamlfmt"],
-        "//conditions:default": ["@yamlfmt_linux_arm64//:yamlfmt"],
-    }),
-    outs = ["yamlfmt"],
-    cmd = "cp $< $@",
-    executable = True,
+alias(
+    name = "yamlfmt",
+    actual = "@aspect_rules_lint//format:yamlfmt",
+)
+
+alias(
+    name = "shfmt",
+    actual = "@aspect_rules_lint//format:shfmt",
 )
 
 # Taplo selection
@@ -61,7 +59,8 @@ format_multirun(
     cc = ":clang_format",
     markdown = ":markdownlint",
     python = ":ruff",
+    shell = ":shfmt",
     starlark = ":buildifier",
     toml = ":taplo_bin",
-    yaml = ":yamlfmt_bin",
+    yaml = ":yamlfmt",
 )

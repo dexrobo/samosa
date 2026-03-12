@@ -16,5 +16,4 @@ source "${RUNFILES_DIR:-/dev/null}/$RUNFILES_SCRIPT" 2>/dev/null ||
 # Find the binary in the rules_js pkg structure
 MARKDOWNLINT=$(rlocation "markdownlint-cli2/package/bin/markdownlint-cli2.js")
 
-# Use the node toolchain from rules_nodejs if available, otherwise default to system node
 exec node "$MARKDOWNLINT" "$@"

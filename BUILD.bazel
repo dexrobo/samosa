@@ -67,7 +67,7 @@ alias(
 
 alias(
     name = "format_yaml",
-    actual = "//tools/format:yamlfmt_bin",
+    actual = "//tools/format:yamlfmt",
 )
 
 alias(
