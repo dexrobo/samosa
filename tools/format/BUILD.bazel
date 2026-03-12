@@ -3,9 +3,20 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
 
+genrule(
+    name = "ruff_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@ruff_arm64//file"],
+        "//conditions:default": ["@ruff_amd64//file"],
+    }),
+    outs = ["ruff_executable"],
+    cmd = "tar -xzf $< --strip-components=1 --to-stdout ruff-aarch64-unknown-linux-gnu/ruff > $@ || tar -xzf $< --strip-components=1 --to-stdout ruff-x86_64-unknown-linux-gnu/ruff > $@",
+    executable = True,
+)
+
 alias(
     name = "ruff",
-    actual = "@aspect_rules_lint//format:ruff",
+    actual = ":ruff_bin",
 )
 
 alias(
@@ -13,14 +24,36 @@ alias(
     actual = "@buildifier_prebuilt//:buildifier",
 )
 
+genrule(
+    name = "yamlfmt_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@yamlfmt_arm64//file"],
+        "//conditions:default": ["@yamlfmt_amd64//file"],
+    }),
+    outs = ["yamlfmt_executable"],
+    cmd = "tar -xzf $< --to-stdout yamlfmt > $@",
+    executable = True,
+)
+
 alias(
     name = "yamlfmt",
-    actual = "@aspect_rules_lint//format:yamlfmt",
+    actual = ":yamlfmt_bin",
+)
+
+genrule(
+    name = "shfmt_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@shfmt_arm64//file"],
+        "//conditions:default": ["@shfmt_amd64//file"],
+    }),
+    outs = ["shfmt_executable"],
+    cmd = "cp $< $@",
+    executable = True,
 )
 
 alias(
     name = "shfmt",
-    actual = "@aspect_rules_lint//format:shfmt",
+    actual = ":shfmt_bin",
 )
 
 # Taplo selection

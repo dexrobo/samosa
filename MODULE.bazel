@@ -61,11 +61,45 @@ bazel_dep(name = "abseil-cpp", version = "20240722.0", repo_name = "com_google_a
 bazel_dep(name = "googletest", version = "1.15.2", repo_name = "com_google_googletest")
 bazel_dep(name = "google_benchmark", version = "1.9.1", repo_name = "com_github_google_benchmark")
 bazel_dep(name = "spdlog", version = "1.17.0", repo_name = "com_github_gabime_spdlog")
+
+# fmt
 bazel_dep(name = "fmt", version = "12.1.0", repo_name = "com_github_fmtlib_fmt")
 
-# Custom multitool for basedpyright
-bazel_dep(name = "rules_multitool", version = "1.0.0")
+# Standalone binaries for formatting
+http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
-multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
-multitool.hub(lockfile = "@@//tools/lint:multitool.lock.json")
-use_repo(multitool, "multitool")
+http_file(
+    name = "ruff_amd64",
+    sha256 = "49592925719ee59a7e6675a95dc20e76c0b921b498500a54b1cce3c314fdf794",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.9.9/ruff-x86_64-unknown-linux-gnu.tar.gz",
+)
+
+http_file(
+    name = "ruff_arm64",
+    sha256 = "34b4ea311560d5e7f80597eaf3dede9ded194dffe131d7fee8841904792a644c",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.9.9/ruff-aarch64-unknown-linux-gnu.tar.gz",
+)
+
+http_file(
+    name = "shfmt_amd64",
+    sha256 = "1f57a384d59542f8fac5f503da1f3ea44242f46dff969569e80b524d64b71dbc",
+    url = "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_amd64",
+)
+
+http_file(
+    name = "shfmt_arm64",
+    sha256 = "9d23013d56640e228732fd2a04a9ede0ab46bc2d764bf22a4a35fb1b14d707a8",
+    url = "https://github.com/mvdan/sh/releases/download/v3.10.0/shfmt_v3.10.0_linux_arm64",
+)
+
+http_file(
+    name = "yamlfmt_amd64",
+    sha256 = "0696f84c34ec6a104633dc5f5897e67a3e3e34caa362739d5e9c2d5c70ada109",
+    url = "https://github.com/google/yamlfmt/releases/download/v0.15.0/yamlfmt_0.15.0_Linux_x86_64.tar.gz",
+)
+
+http_file(
+    name = "yamlfmt_arm64",
+    sha256 = "b8820250488579c5194e2ee8f9def65187188b43231c557d1c9644504a1b1ada",
+    url = "https://github.com/google/yamlfmt/releases/download/v0.15.0/yamlfmt_0.15.0_Linux_arm64.tar.gz",
+)
