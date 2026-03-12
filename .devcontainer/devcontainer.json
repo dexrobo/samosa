@@ -8,7 +8,9 @@
         "vscode": {
             "extensions": [
                 "bazelbuild.vscode-bazel",
-                "ms-vscode.cpptools"
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "charliermarsh.ruff"
             ]
         }
     },

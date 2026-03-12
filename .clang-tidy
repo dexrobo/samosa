@@ -113,8 +113,8 @@ Checks: >
   -readability-unnecessary-abbreviations,
   -readability-use-anyofallof,
 
-# Only lint dex and tools header files (not system or thirdparty).
-HeaderFilterRegex: '^\.\/(dex|tools)\/'
+# Only lint dex header files (not system or thirdparty).
+HeaderFilterRegex: '^\.\/dex\/'
 
 # Use .clang-format file for formatting automated fixes.
 FormatStyle: 'file'
