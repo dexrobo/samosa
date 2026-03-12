@@ -8,6 +8,7 @@ import math
 import sys
 from collections import defaultdict
 from pathlib import Path
+from typing import Any, cast
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -62,13 +63,16 @@ def format_benchmark_stats(input_file: str) -> None:
         input_file: Path to the CSV file containing per-frame measurements.
     """
     try:
-        data = []
+        data: list[dict[str, float]] = []
         with Path(input_file).open() as f:
             reader = csv.DictReader(f)
-            for row in reader:
-                # Convert numeric fields
-                processed_row = {k: float(v) for k, v in row.items()}
-                data.append(processed_row)
+            for raw_row in reader:
+                # raw_row is dict[str | None, str | None]
+                converted_row: dict[str, float] = {}
+                for k, v in raw_row.items():
+                    if k is not None and v is not None:
+                        converted_row[str(k)] = float(v)
+                data.append(converted_row)
 
         if not data:
             logger.warning("No data found in input file: %s", input_file)

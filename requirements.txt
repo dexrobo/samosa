@@ -1,1 +1,4 @@
+mypy==1.15.0
+mypy-extensions==1.0.0
+typing-extensions==4.12.2
 ruff==0.9.9

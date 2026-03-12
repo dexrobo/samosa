@@ -27,11 +27,18 @@ bazel run //tools/format
 # 2. Linting (Ruff via aspect)
 log "Running Ruff linter..."
 bazel build --config=lint //...
-# 3. Production Tests
+
+# 3. Type Checking (MyPy)
+log "Running MyPy type checker..."
+# We run against the package directory.
+# MyPy will find the files in the runfiles if they are provided as data.
+bazel run //tools/lint:mypy_bin -- dex/infrastructure/shared_memory
+
+# 4. Production Tests
 log "Running production tests..."
 bazel test --config=prod //...
 
-# 4. Sanitizer Tests
+# 5. Sanitizer Tests
 log "Running ASAN tests (static)..."
 # Some tests are incompatible with static ASAN due to dlsym;
 # they are automatically skipped via target_compatible_with in BUILD files.
