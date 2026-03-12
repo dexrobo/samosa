@@ -37,7 +37,7 @@ using BufferCallback = bool (*)(Buffer*);
 
 // An empty callback to pass to the SharedMemory constructor when no callback is needed.
 template <typename Buffer>
-bool NullCallback(Buffer* buffer) {
+bool NullCallback(Buffer* /*buffer*/) {
   return true;
 }
 
@@ -141,4 +141,8 @@ class SharedMemory {
 
 }  // namespace dex::shared_memory
 
+// work around for clang-tidy warning "Included header xxxxxx is not used directly"
+#define SHARED_MEMORY_IMPL_H
+
 #include "dex/infrastructure/shared_memory/shared_memory_impl.h"
+SHARED_MEMORY_IMPL_H;

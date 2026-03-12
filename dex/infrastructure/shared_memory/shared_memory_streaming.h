@@ -260,4 +260,8 @@ class Consumer {
 
 }  // namespace dex::shared_memory
 
+// work around for clang-tidy warning "Included header xxxxxx is not used directly"
+#define SHARED_MEM_STREAMING_IMPL_H
+
 #include "dex/infrastructure/shared_memory/shared_memory_streaming_impl.h"
+SHARED_MEM_STREAMING_IMPL_H;

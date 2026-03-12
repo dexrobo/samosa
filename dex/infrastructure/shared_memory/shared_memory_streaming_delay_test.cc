@@ -129,7 +129,7 @@ TEST_P(SharedMemStreamingDelayTest, ProducerConsumerInitialization) {
 
         // Use specific delay before starting producer
         std::this_thread::sleep_for(std::chrono::microseconds(delays.producer_init_delay_us));
-        producer.Run([delays](ArrayBuffer& buffer, uint /*counter*/, int buffer_id) {
+        producer.Run([delays](ArrayBuffer& buffer, uint /*counter*/, int /*buffer_id*/) {
           // Use specific delay for publishing a frame
           std::this_thread::sleep_for(std::chrono::microseconds(delays.producer_frame_delay_us));
           std::string message = "test message";

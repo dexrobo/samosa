@@ -335,7 +335,7 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallbackFastProducerFromInit) {
     });
   });
 
-  std::thread monitor_thread([&monitor, &format_regex, &producer_sequence, max_iterations]() {
+  std::thread monitor_thread([&monitor, &format_regex, &producer_sequence]() {
     uint64_t last_sequence_number = 0;
     monitor.Run(
         [&](const test::ArrayBuffer& buffer, uint64_t sequence_number) {
@@ -395,8 +395,8 @@ TEST_F(SharedMemoryMonitorTest, RunStopsWhenStreamingControlStopped) {
 
   // Run the monitor with a callback
   monitor.Run(
-      [&](const test::ArrayBuffer& buffer, uint64_t) { callback_count.fetch_add(1, std::memory_order_relaxed); }, 0.1,
-      1000);
+      [&](const test::ArrayBuffer& /*buffer*/, uint64_t) { callback_count.fetch_add(1, std::memory_order_relaxed); },
+      0.1, 1000);
 
   stop_streaming.join();
 

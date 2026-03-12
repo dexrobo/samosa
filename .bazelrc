@@ -6,6 +6,12 @@ build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 # Linux-specific defaults (using system GCC)
 build:linux --repo_env=CC=gcc
 build:linux --repo_env=GCOV=gcov
+build:linux --copt=-fexperimental-library
+build:linux --cxxopt=-fexperimental-library
+build:linux --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL
+build:linux --cxxopt=-D_LIBCPP_ENABLE_EXPERIMENTAL
+build:linux --copt=-Wno-unused-parameter
+build:linux --cxxopt=-Wno-unused-parameter
 
 # macOS-specific defaults (applied only on macOS via build:macos)
 build:macos --repo_env=CC=clang
@@ -18,10 +24,13 @@ build:macos --copt=-D_LIBCPP_ENABLE_EXPERIMENTAL
 build:macos --cxxopt=-D_LIBCPP_ENABLE_EXPERIMENTAL
 
 # Strict warning flags from core repo
+build --copt=-Wno-unused-parameter
+build --cxxopt=-Wno-unused-parameter
 build --per_file_copt=^dex/.*,^tools/.*@-Werror
 build --per_file_copt=^dex/.*,^tools/.*@-Wall
 build --per_file_copt=^dex/.*,^tools/.*@-Wextra
-build --copt=-Wno-unused-parameter
+build --copt=-Wno-unknown-warning-option
+build --cxxopt=-Wno-unknown-warning-option
 
 # Common flags
 build --strip=never

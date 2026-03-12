@@ -409,7 +409,7 @@ TEST_F(SharedMemStreamingTest, ConsumerRunningFutexWaitFailure) {
 TEST_F(SharedMemStreamingTest, ConsumerInitFutexWaitFailure) {
   RunProducerConsumer<ArrayBuffer>(
       // Producer lambda
-      [](std::string_view shared_memory_name) {
+      [](std::string_view /*shared_memory_name*/) {
         const MockFutex mock_futex;
         const dex::shared_memory::detail::ScopedFutex scoped_futex(mock_futex);
 
@@ -447,7 +447,7 @@ TEST_F(SharedMemStreamingTest, ConsumerInitFutexWaitFailure) {
 TEST_F(SharedMemStreamingTest, ConsumerInterruptedReturnsStoppedNotTimeout) {
   RunProducerConsumer<ArrayBuffer>(
       // Producer lambda - just wait for consumer to finish
-      [](std::string_view shared_memory_name) {
+      [](std::string_view /*shared_memory_name*/) {
         const MockFutex mock_futex;
         const dex::shared_memory::detail::ScopedFutex scoped_futex(mock_futex);
 
@@ -488,7 +488,7 @@ TEST_F(SharedMemStreamingTest, ConsumerInterruptedReturnsStoppedNotTimeout) {
 TEST_F(SharedMemStreamingTest, ConsumerErrorReturnsError) {
   RunProducerConsumer<ArrayBuffer>(
       // Producer lambda - just wait for consumer to finish
-      [](std::string_view shared_memory_name) {
+      [](std::string_view /*shared_memory_name*/) {
         const MockFutex mock_futex;
         const dex::shared_memory::detail::ScopedFutex scoped_futex(mock_futex);
 

@@ -1,5 +1,55 @@
 load("@bazel_skylib//rules:common_settings.bzl", "bool_setting")
 
+exports_files([
+    ".clang-tidy",
+    ".ruff.toml",
+    ".aspectignore",
+    ".markdownlint.yaml",
+    ".taplo.toml",
+    ".yamlfmt.yaml",
+])
+
+alias(
+    name = "shared_memory",
+    actual = "//dex/infrastructure/shared_memory:shared_memory",
+    visibility = ["//visibility:public"],
+)
+
+alias(
+    name = "format",
+    actual = "//tools/format",
+)
+
+alias(
+    name = "format_cc",
+    actual = "//tools/format:clang_format",
+)
+
+alias(
+    name = "format_py",
+    actual = "//tools/format:ruff",
+)
+
+alias(
+    name = "format_starlark",
+    actual = "//tools/format:buildifier",
+)
+
+alias(
+    name = "format_toml",
+    actual = "//tools/format:taplo_bin",
+)
+
+alias(
+    name = "format_yaml",
+    actual = "//tools/format:yamlfmt",
+)
+
+alias(
+    name = "format_markdown",
+    actual = "//tools/format:markdownlint",
+)
+
 config_setting(
     name = "asan_config",
     values = {"platform_suffix": "asan"},
@@ -39,44 +89,3 @@ config_setting(
     name = "ci_config",
     values = {"define": "ci=true"},
 )
-
-alias(
-    name = "format",
-    actual = "//tools/format",
-)
-
-alias(
-    name = "format_cc",
-    actual = "//tools/format:clang_format",
-)
-
-alias(
-    name = "format_py",
-    actual = "//tools/format:ruff",
-)
-
-alias(
-    name = "format_starlark",
-    actual = "//tools/format:buildifier",
-)
-
-alias(
-    name = "format_toml",
-    actual = "//tools/format:taplo_bin",
-)
-
-alias(
-    name = "format_yaml",
-    actual = "//tools/format:yamlfmt",
-)
-
-alias(
-    name = "format_markdown",
-    actual = "//tools/format:markdownlint",
-)
-
-exports_files([
-    ".clang-tidy",
-    ".ruff.toml",
-    ".aspectignore",
-])
