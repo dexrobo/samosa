@@ -10,7 +10,7 @@ genrule(
         "//conditions:default": ["@ruff_amd64//file"],
     }),
     outs = ["ruff_executable"],
-    cmd = "tar -xzf $< --strip-components=1 --to-stdout ruff-aarch64-unknown-linux-gnu/ruff > $@ || tar -xzf $< --strip-components=1 --to-stdout ruff-x86_64-unknown-linux-gnu/ruff > $@",
+    cmd = "tar -xzf $< --strip-components=1 --to-stdout ruff > $@",
     executable = True,
 )
 
@@ -31,7 +31,7 @@ genrule(
         "//conditions:default": ["@yamlfmt_amd64//file"],
     }),
     outs = ["yamlfmt_executable"],
-    cmd = "tar -xzf $< --to-stdout yamlfmt > $@",
+    cmd = "tar -xzf $< --strip-components=1 --to-stdout yamlfmt > $@ || tar -xzf $< --to-stdout yamlfmt > $@",
     executable = True,
 )
 

@@ -64,13 +64,11 @@ build:tsan-dynamic --linkopt=-fsanitize=thread
 build:tsan-dynamic --copt=-Wno-tsan
 test:tsan-dynamic --test_env=TSAN_OPTIONS=report_atomic_races=0
 test:tsan-dynamic --test_timeout 600,1200,3600,3600
-test:tsan-dynamic --run_under="setarch aarch64 -R"
 
 build:tsan --config=tsan-dynamic
 build:tsan --platform_suffix tsan
 build:tsan --linkopt=-static-libtsan
 test:tsan --test_timeout 600,1200,3600,3600
-test:tsan --run_under="setarch aarch64 -R"
 
 # ubsan config for undefined behavior sanitizer.
 build:ubsan --compilation_mode dbg
