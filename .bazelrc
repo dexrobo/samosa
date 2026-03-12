@@ -3,6 +3,12 @@ build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
 build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 
+# Strict warning flags from core repo
+build --per_file_copt=^dex/.*,^tools/.*@-Werror
+build --per_file_copt=^dex/.*,^tools/.*@-Wall
+build --per_file_copt=^dex/.*,^tools/.*@-Wextra
+build --copt=-Wno-unused-parameter
+
 # Common flags
 build --strip=never
 build --test_output=errors
