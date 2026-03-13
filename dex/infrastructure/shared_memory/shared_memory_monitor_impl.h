@@ -148,6 +148,5 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 
 }  // namespace dex::shared_memory
 
-// work around for clang-tidy warning "Included header xxxxxx is not used directly"
-#define SHARED_MEMORY_MONITOR_IMPL_H
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
+

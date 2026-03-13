@@ -102,8 +102,7 @@ class Monitor {
 
 }  // namespace dex::shared_memory
 
-// Include implementation
-#define SHARED_MEMORY_MONITOR_IMPL_H
 #include "dex/infrastructure/shared_memory/shared_memory_monitor_impl.h"
-SHARED_MEMORY_MONITOR_IMPL_H;
+
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
+

@@ -153,9 +153,7 @@ class SharedMemory {
 
 }  // namespace dex::shared_memory
 
-// work around for clang-tidy warning "Included header xxxxxx is not used directly"
-#define SHARED_MEMORY_IMPL_H
-
 #include "dex/infrastructure/shared_memory/shared_memory_impl.h"
-SHARED_MEMORY_IMPL_H;
+
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
+

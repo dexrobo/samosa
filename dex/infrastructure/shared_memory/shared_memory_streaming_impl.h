@@ -240,6 +240,5 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeFra
 
 }  // namespace dex::shared_memory
 
-// work around for clang-tidy warning "Included header xxxxxx is not used directly"
-#define SHARED_MEM_STREAMING_IMPL_H
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
+
