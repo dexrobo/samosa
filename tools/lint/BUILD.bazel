@@ -3,9 +3,17 @@ load("@rules_python//python:defs.bzl", "py_binary")
 
 package(default_visibility = ["//visibility:public"])
 
+alias(
+    name = "clang-tidy",
+    actual = "@llvm_toolchain_llvm//:clang-tidy",
+)
+
 py_binary(
     name = "mypy",
-    srcs = ["mypy_main.py"],
+    srcs = [
+        "__init__.py",
+        "mypy_main.py",
+    ],
     data = ["//dex/infrastructure/shared_memory:format_benchmark_stats"],
     main = "mypy_main.py",
     deps = [
@@ -17,7 +25,10 @@ py_binary(
 
 py_binary(
     name = "ruff",
-    srcs = ["ruff_main.py"],
+    srcs = [
+        "__init__.py",
+        "ruff_main.py",
+    ],
     main = "ruff_main.py",
     deps = [
         requirement("ruff"),
