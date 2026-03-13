@@ -25,6 +25,12 @@ PART="${1:-all}"
 shift || true
 EXTRA_ARGS=("$@")
 
+# If running in CI, automatically add the CI define to enable optimizations/reduced test sets.
+if [[ "${CI:-}" == "true" ]]; then
+    log "CI environment detected. Enabling CI optimizations."
+    EXTRA_ARGS=("--define=ci=true" "${EXTRA_ARGS[@]}")
+fi
+
 case "$PART" in
     format)
         log "Running all formatters..."
@@ -34,8 +40,8 @@ case "$PART" in
         log "Running Ruff linter..."
         bazel build --config=lint //... "${EXTRA_ARGS[@]}"
         log "Running MyPy type checker..."
-        # MyPy does not accept Bazel-specific arguments like --define
-        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
+        # MyPy is run via 'bazel run', so it needs EXTRA_ARGS before the '--' separator.
+        bazel run //tools/lint:mypy "${EXTRA_ARGS[@]}" -- dex/infrastructure/shared_memory
         ;;
     test-prod)
         log "Running production tests..."
