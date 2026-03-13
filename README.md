@@ -1,91 +1,99 @@
-# Shared Memory IPC
+# Samosa: Resilient Lock-Free Snapshot Streaming
 
-This library provides a simple interface for creating and using shared memory for inter-process communication (IPC).
+Samosa is a high-performance C++20 library designed for ultra-low latency data streaming between processes. Unlike traditional message queues, Samosa implements **snapshot semantics**: consumers always receive the latest available data, making it ideal for high-frequency sensor data, telemetry, and video frames where throughput and "current state" are prioritized over historical completeness.
+
+## Key Features
+
+- **Non-Blocking Publisher**: Producers never block on consumers. High-frequency updates are published to shared memory with minimal overhead.
+- **Latest-Only Consumption**: Consumers always fetch the most recent snapshot. If multiple updates occurred since the last read, intermediate ones are skipped to prevent "lag" buildup.
+- **Independent Lifecycle Resilience**: Producers and consumers can restart at any time. They automatically reconnect to the shared memory segment and resume data transfer reliably.
+- **Lock-Free Internals**: Uses atomic operations and Linux futexes for synchronization, avoiding heavy kernel locks.
+- **Double-Buffered**: Implements internal double-buffering to ensure the consumer never reads a partially written frame.
 
 ## Usage
-> [!IMPORTANT] TODO: Fix usage examples to match the actual public API (SharedMemory::Create/Open, etc.).
 
-First, define the data-structure that you want to publish and consume.
+### 1. Define your Data Structure
+The data structure must be a "Plain Old Data" (POD) type suitable for shared memory (no pointers to heap memory).
+
 ```cpp
-struct FrameBuffer {
-  std::array<std::byte, kPixelDataSize> pixel_data;
-  std::array<uint16_t, kResolution> depth_data;
-  std::array<char, kNameLength> camera_name;
-  unsigned long timestamp;
-  unsigned long frame_id;
+#include <array>
+#include <cstddef>
+
+struct Telemetry {
+  uint64_t timestamp_ns;
+  std::array<float, 6> pose;
+  std::array<uint8_t, 1024> payload;
 };
 ```
-Then,
 
-1. Create a shared memory object
+### 2. Initialize the Shared Memory Segment
+One process (usually the producer or a manager) must create the segment.
 
-   ```cpp
-   SharedMemory<FrameBuffer> shared_memory(shared_memory_name, true);
-   if (!shared_memory) {
-     std::cerr << "Failed to create shared memory.\n";
-     return 1;
-   }
-   ```
-   > [!WARNING] The shared memory must be created first before publishing or consuming data.
+```cpp
+#include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
-2. Publish data to the shared memory object
+using dex::shared_memory::SharedMemory;
+using dex::shared_memory::LockFreeSharedMemoryBuffer;
+using dex::shared_memory::InitializeBuffer;
 
-   ```cpp
-   auto producer = Producer<FrameBuffer>{shared_memory_name};
-   producer.Run([](FrameBuffer& buffer, const uint frame_count) {
-     // TODO: Fill buffer with data
-   });
-   ```
-   > Internally, the producer will alternate between buffers to publish data and provide the correct buffer to the callback.
-3. Consume data from the shared memory object
+const std::string shm_name = "/telemetry_stream";
 
-   ```cpp
-   auto consumer = Consumer<FrameBuffer>{shared_memory_name};
-   consumer.Run([](FrameBuffer& buffer) {
-     // TODO: Process buffer
-   });
-   ```
-   > [!NOTE] Producer and consumer can be brought up in any order.
-
-4. Destroy the shared memory
-
-   ```cpp
-  if (!SharedMemory<FrameBuffer>::Destroy(shared_memory_name)) {
-     std::cerr << "Failed to unlink shared memory.\n";
-     return 1;
-   }
-   ```
-
-## Run the tests
-
-```sh
-bazel test --config=prod //dex/infrastructure/shared_memory/... --test_output=all
+// Create the segment (or fail if it exists)
+auto shm = SharedMemory<Telemetry, 2, LockFreeSharedMemoryBuffer>::Create(
+    shm_name, InitializeBuffer<Telemetry>);
 ```
 
-## Run the benchmark
-```sh
-bazel run --config=prod //dex/infrastructure/shared_memory:run_benchmark_with_stats
+### 3. Publish Data
+Producers use the `Producer` class to stream snapshots.
+
+```cpp
+#include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
+
+dex::shared_memory::Producer<Telemetry> producer{shm_name};
+
+producer.Run([](Telemetry& buffer, uint32_t frame_count, int buffer_id) {
+    buffer.timestamp_ns = GetTimeNs();
+    // Fill buffer...
+});
 ```
 
-## Run the example
-Create the shared memory object
-```sh
-bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_example create /shared-mem
-```
-Run the producer
-```sh
-bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_example publisher /shared-mem -- --debug
-```
-Run the consumer
-```sh
-bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_example consumer /shared-mem -- --debug
-```
-> [!NOTE] To save the non-debug output to a file, do:
-> ```sh
-> bazel run //dex/infrastructure/shared_memory:shared_memory_ipc_example consumer /shared-mem -- --debug | tee console.log
-> ```
+### 4. Consume Data
+Consumers use the `Consumer` class to receive the latest snapshot. The `Run` method blocks if no new data is available.
 
-Destroy the shared memory object
-```sh
-bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_example destroy /shared-mem
+```cpp
+#include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
+
+dex::shared_memory::Consumer<Telemetry> consumer{shm_name};
+
+consumer.Run([](const Telemetry& buffer) {
+    std::cout << "Received snapshot at: " << buffer.timestamp_ns << std::endl;
+});
 ```
+
+## Contributing
+
+We welcome contributions! To ensure high standards of correctness and performance, please follow these steps:
+
+### Development Environment
+The easiest way to contribute is using the provided **Dev Container**. It contains all necessary dependencies (Bazel, GCC 12, Python, Node.js).
+
+### Verification
+Before submitting a Pull Request, you **must** run the comprehensive verification suite. This script runs all formatters, linters (Ruff and MyPy), and test configurations (including ASAN, TSAN, and UBSAN).
+
+```bash
+# Run everything
+./tools/check.sh all
+
+# Or run specific parts
+./tools/check.sh format
+./tools/check.sh lint
+./tools/check.sh test-prod
+```
+
+### PR Guidelines
+1. **Tests**: Every fix or feature requires a corresponding test case in `dex/infrastructure/shared_memory/`.
+2. **Sanitizers**: Ensure your changes pass under both `asan-dynamic` and `tsan-dynamic` configurations.
+3. **Style**: Code must be formatted using `bazel run //tools/format`.
+
+## License
+Samosa is released under the MIT License. See [LICENSE](LICENSE) for details.
