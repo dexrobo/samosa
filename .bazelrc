@@ -1,3 +1,6 @@
+# Enable automatic platform-specific config detection (e.g., build:linux, build:macos)
+common --enable_platform_specific_config
+
 # C++20 is required
 build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
@@ -5,13 +8,16 @@ build --copt=-std=c++20
 build --host_copt=-std=c++20
 build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 
-# Platform-specific compiler selection
+# --- Platform-specific compiler selection ---
+
+# Linux (Pinned to GCC 12 per core standard)
 build:linux --repo_env=CC=gcc-12
 build:linux --repo_env=GCOV=gcov-12
 
+# macOS
 build:macos --repo_env=CC=clang
 
-# Strict warning flags
+# --- Strict warning flags ---
 build --copt=-Wno-unused-parameter
 build --cxxopt=-Wno-unused-parameter
 build --copt=-Wno-unknown-warning-option
