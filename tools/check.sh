@@ -22,51 +22,53 @@ function error() {
 
 # Allow running only a specific part
 PART="${1:-all}"
+shift || true
+EXTRA_ARGS=("$@")
 
 case "$PART" in
     format)
         log "Running all formatters..."
-        bazel run //tools/format
+        bazel run //tools/format "${EXTRA_ARGS[@]}"
         ;;
     lint)
         log "Running Ruff linter..."
-        bazel build --config=lint //...
+        bazel build --config=lint //... "${EXTRA_ARGS[@]}"
         log "Running MyPy type checker..."
-        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
+        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory "${EXTRA_ARGS[@]}"
         ;;
     test-prod)
         log "Running production tests..."
-        bazel test --config=prod //...
+        bazel test --config=prod //... "${EXTRA_ARGS[@]}"
         ;;
     test-asan)
         log "Running ASAN tests (static)..."
-        bazel test --config=asan //...
+        bazel test --config=asan //... "${EXTRA_ARGS[@]}"
         ;;
     test-asan-dynamic)
         log "Running ASAN tests (dynamic)..."
-        bazel test --config=asan-dynamic //...
+        bazel test --config=asan-dynamic //... "${EXTRA_ARGS[@]}"
         ;;
     test-tsan)
         log "Running TSAN tests (static)..."
-        bazel test --config=tsan --run_under="setarch $(uname -m) -R" //...
+        bazel test --config=tsan --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]}"
         ;;
     test-tsan-dynamic)
         log "Running TSAN tests (dynamic)..."
-        bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //...
+        bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]}"
         ;;
     test-ubsan)
         log "Running UBSAN tests..."
-        bazel test --config=ubsan //...
+        bazel test --config=ubsan //... "${EXTRA_ARGS[@]}"
         ;;
     all)
-        "$0" format
-        "$0" lint
-        "$0" test-prod
-        "$0" test-asan
-        "$0" test-asan-dynamic
-        "$0" test-tsan
-        "$0" test-tsan-dynamic
-        "$0" test-ubsan
+        "$0" format "${EXTRA_ARGS[@]}"
+        "$0" lint "${EXTRA_ARGS[@]}"
+        "$0" test-prod "${EXTRA_ARGS[@]}"
+        "$0" test-asan "${EXTRA_ARGS[@]}"
+        "$0" test-asan-dynamic "${EXTRA_ARGS[@]}"
+        "$0" test-tsan "${EXTRA_ARGS[@]}"
+        "$0" test-tsan-dynamic "${EXTRA_ARGS[@]}"
+        "$0" test-ubsan "${EXTRA_ARGS[@]}"
         ;;
     *)
         error "Unknown check part: $PART"

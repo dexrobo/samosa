@@ -20,7 +20,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Formatters
-        run: ./tools/check.sh format
+        run: ./tools/check.sh format --define=ci=true
 
   lint:
     runs-on: ubuntu-22.04
@@ -35,7 +35,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Linters
-        run: ./tools/check.sh lint
+        run: ./tools/check.sh lint --define=ci=true
 
   test-prod:
     runs-on: ubuntu-22.04
@@ -50,7 +50,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Production Tests
-        run: ./tools/check.sh test-prod
+        run: ./tools/check.sh test-prod --define=ci=true
 
   test-sanitizers:
     runs-on: ubuntu-22.04
@@ -69,4 +69,4 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Sanitizer Tests (${{ matrix.config }})
-        run: ./tools/check.sh test-${{ matrix.config }}
+        run: ./tools/check.sh test-${{ matrix.config }} --define=ci=true

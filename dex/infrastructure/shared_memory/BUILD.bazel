@@ -164,6 +164,7 @@ cc_test(
         "//:gcov_config": ["@platforms//:incompatible"],
         "//:tsan_config": ["@platforms//:incompatible"],
         "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//:ubsan_config": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
     deps = [
