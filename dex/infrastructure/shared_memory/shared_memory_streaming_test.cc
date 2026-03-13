@@ -454,7 +454,7 @@ TEST_F(SharedMemStreamingTest, ConsumerInterruptedReturnsStoppedNotTimeout) {
         dex::shared_memory::StreamingControl::Instance().ReconfigureAndReset({.handle_signals = true});
         auto& control = dex::shared_memory::StreamingControl::Instance();
         while (control.IsRunning()) {
-          std::this_thread::sleep_for(std::chrono::milliseconds(1));
+          std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
         CoverageSafeExit(0);
       },

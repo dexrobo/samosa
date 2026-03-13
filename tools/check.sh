@@ -34,7 +34,8 @@ case "$PART" in
         log "Running Ruff linter..."
         bazel build --config=lint //... "${EXTRA_ARGS[@]}"
         log "Running MyPy type checker..."
-        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory "${EXTRA_ARGS[@]}"
+        # MyPy does not accept Bazel-specific arguments like --define
+        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
         ;;
     test-prod)
         log "Running production tests..."
