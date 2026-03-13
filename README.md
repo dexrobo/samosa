@@ -44,28 +44,34 @@ auto shm = SharedMemory<Telemetry, 2, LockFreeSharedMemoryBuffer>::Create(
 ```
 
 ### 3. Publish Data
-Producers use the `Producer` class to stream snapshots.
+The `Producer::Run` method is a **blocking call** that enters a continuous loop. It executes the provided callable every time a new buffer is ready to be populated.
 
 ```cpp
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
 dex::shared_memory::Producer<Telemetry> producer{shm_name};
 
+// This call blocks until the process receives a termination signal (SIGINT/SIGTERM)
 producer.Run([](Telemetry& buffer, uint32_t frame_count, int buffer_id) {
+    // The callable is executed continuously to populate each new frame
     buffer.timestamp_ns = GetTimeNs();
     // Fill buffer...
 });
 ```
 
 ### 4. Consume Data
-Consumers use the `Consumer` class to receive the latest snapshot. The `Run` method blocks if no new data is available.
+The `Consumer::Run` method is also a **blocking call**. It waits for the producer to publish new data and then executes the provided callable to process the latest snapshot.
 
 ```cpp
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
 dex::shared_memory::Consumer<Telemetry> consumer{shm_name};
 
+// This call blocks and waits for new snapshots from the producer
 consumer.Run([](const Telemetry& buffer) {
+    // This callable is executed continuously for every new snapshot received.
+    // Note: If the producer is faster than the consumer, intermediate frames 
+    // are automatically skipped to ensure the consumer always gets the latest state.
     std::cout << "Received snapshot at: " << buffer.timestamp_ns << std::endl;
 });
 ```
