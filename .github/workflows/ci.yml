@@ -14,12 +14,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl gnupg build-essential python3 nodejs
+          sudo apt-get install -y curl gnupg build-essential python3 nodejs gcc-12 g++-12
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 --slave /usr/bin/g++ g++ /usr/bin/g++-12
       - name: Install Bazelisk
         run: |
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Formatters
+        env:
+          CC: gcc-12
+          CXX: g++-12
         run: ./tools/check.sh format
 
   lint:
@@ -29,12 +33,16 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y curl gnupg build-essential python3
+          sudo apt-get install -y curl gnupg build-essential python3 gcc-12 g++-12
+          sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 --slave /usr/bin/g++ g++ /usr/bin/g++-12
       - name: Install Bazelisk
         run: |
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Linters
+        env:
+          CC: gcc-12
+          CXX: g++-12
         run: ./tools/check.sh lint
 
   test-prod:
@@ -51,6 +59,9 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Production Tests
+        env:
+          CC: gcc-12
+          CXX: g++-12
         run: ./tools/check.sh test-prod
 
   test-sanitizers:
@@ -71,4 +82,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Sanitizer Tests (${{ matrix.config }})
+        env:
+          CC: gcc-12
+          CXX: g++-12
         run: ./tools/check.sh test-${{ matrix.config }}
