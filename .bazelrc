@@ -1,6 +1,8 @@
 # C++20 is required
 build --cxxopt=-std=c++20
 build --host_cxxopt=-std=c++20
+build --copt=-std=c++20
+build --host_copt=-std=c++20
 build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 
 # Experimental headers support (required for observer_ptr etc)
