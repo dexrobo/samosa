@@ -10,6 +10,12 @@ exports_files([
 ])
 
 alias(
+    name = "clang-tidy",
+    actual = "@llvm_toolchain_llvm//:clang-tidy",
+    visibility = ["//visibility:public"],
+)
+
+alias(
     name = "shared_memory",
     actual = "//dex/infrastructure/shared_memory:shared_memory",
     visibility = ["//visibility:public"],

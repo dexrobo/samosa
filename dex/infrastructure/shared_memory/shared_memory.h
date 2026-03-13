@@ -1,3 +1,11 @@
+/**
+ * @file shared_memory.h
+ * @brief Core primitives for lock-free snapshot streaming via shared memory.
+ *
+ * This library is optimized for streaming snapshots of POD types between processes.
+ * It is not a general-purpose IPC queue; consumers always jump to the latest state.
+ */
+
 #pragma once
 
 #include <unistd.h>  // for close

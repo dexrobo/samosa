@@ -59,6 +59,7 @@ bool InitializeBuffer(StreamingSharedMemoryBuffer<Buffer, buffer_size>* buffer) 
 
 ////////////////////////////////////////////////////////////////////////////////
 // Producer implementation
+// Provides non-blocking snapshot streaming to shared memory.
 ////////////////////////////////////////////////////////////////////////////////
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, StreamingSharedMemoryBuffer>
@@ -140,6 +141,7 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
 
 ////////////////////////////////////////////////////////////////////////////////
 // Consumer implementation
+// Provides blocking consumption of the latest available snapshot.
 ////////////////////////////////////////////////////////////////////////////////
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, StreamingSharedMemoryBuffer>

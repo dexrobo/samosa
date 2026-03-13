@@ -84,7 +84,7 @@ We welcome contributions! To ensure high standards of correctness and performanc
 The easiest way to contribute is using the provided **Dev Container**. It contains all necessary dependencies (Bazel, GCC 12, Python, Node.js).
 
 ### Verification
-Before submitting a Pull Request, you **must** run the comprehensive verification suite. This script runs all formatters, linters (Ruff and MyPy), and test configurations (including ASAN, TSAN, and UBSAN).
+Before submitting a Pull Request, you **must** run the comprehensive verification suite. This script runs all formatters, linters (Ruff, MyPy, and Clang-Tidy), and test configurations (including ASAN, TSAN, and UBSAN).
 
 ```bash
 # Run everything

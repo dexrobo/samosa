@@ -8,6 +8,8 @@ alias(
     actual = "@llvm_toolchain_llvm//:clang-tidy",
 )
 
+# MyPy type checker target.
+# Executes MyPy hermetically using the project's python toolchain.
 py_binary(
     name = "mypy",
     srcs = [
@@ -23,6 +25,8 @@ py_binary(
     ],
 )
 
+# Ruff linter target.
+# Executes Ruff hermetically using the project's python toolchain.
 py_binary(
     name = "ruff",
     srcs = [
