@@ -13,7 +13,6 @@ alias(
 py_binary(
     name = "mypy",
     srcs = [
-        "__init__.py",
         "mypy_main.py",
     ],
     data = ["//dex/infrastructure/shared_memory:format_benchmark_stats"],
@@ -30,7 +29,6 @@ py_binary(
 py_binary(
     name = "ruff",
     srcs = [
-        "__init__.py",
         "ruff_main.py",
     ],
     main = "ruff_main.py",
