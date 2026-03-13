@@ -20,41 +20,58 @@ function error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# 1. Formatting
-log "Running all formatters..."
-bazel run //tools/format
+# Allow running only a specific part
+PART="${1:-all}"
 
-# 2. Linting (Ruff via aspect)
-log "Running Ruff linter..."
-bazel build --config=lint //...
+case "$PART" in
+    format)
+        log "Running all formatters..."
+        bazel run //tools/format
+        ;;
+    lint)
+        log "Running Ruff linter..."
+        bazel build --config=lint //...
+        log "Running MyPy type checker..."
+        bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
+        ;;
+    test-prod)
+        log "Running production tests..."
+        bazel test --config=prod //...
+        ;;
+    test-asan)
+        log "Running ASAN tests (static)..."
+        bazel test --config=asan //...
+        ;;
+    test-asan-dynamic)
+        log "Running ASAN tests (dynamic)..."
+        bazel test --config=asan-dynamic //...
+        ;;
+    test-tsan)
+        log "Running TSAN tests (static)..."
+        bazel test --config=tsan --run_under="setarch $(uname -m) -R" //...
+        ;;
+    test-tsan-dynamic)
+        log "Running TSAN tests (dynamic)..."
+        bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //...
+        ;;
+    test-ubsan)
+        log "Running UBSAN tests..."
+        bazel test --config=ubsan //...
+        ;;
+    all)
+        "$0" format
+        "$0" lint
+        "$0" test-prod
+        "$0" test-asan
+        "$0" test-asan-dynamic
+        "$0" test-tsan
+        "$0" test-tsan-dynamic
+        "$0" test-ubsan
+        ;;
+    *)
+        error "Unknown check part: $PART"
+        exit 1
+        ;;
+esac
 
-# 3. Type Checking (MyPy)
-log "Running MyPy type checker..."
-# We run against the package directory.
-# MyPy will find the files in the runfiles if they are provided as data.
-bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
-
-# 4. Production Tests
-log "Running production tests..."
-bazel test --config=prod //...
-
-# 5. Sanitizer Tests
-log "Running ASAN tests (static)..."
-# Some tests are incompatible with static ASAN due to dlsym;
-# they are automatically skipped via target_compatible_with in BUILD files.
-bazel test --config=asan //...
-
-log "Running ASAN tests (dynamic)..."
-bazel test --config=asan-dynamic //...
-
-log "Running TSAN tests (static)..."
-# TSAN requires ASLR to be disabled on some systems/architectures.
-bazel test --config=tsan --run_under="setarch $(uname -m) -R" //...
-
-log "Running TSAN tests (dynamic)..."
-bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //...
-
-log "Running UBSAN tests..."
-bazel test --config=ubsan //...
-
-log "All checks passed successfully!"
+log "Check '$PART' passed successfully!"

@@ -20,7 +20,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Formatters
-        run: bazel run //tools/format
+        run: ./tools/check.sh format
 
   lint:
     runs-on: ubuntu-22.04
@@ -34,10 +34,8 @@ jobs:
         run: |
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
-      - name: Run Ruff Linter
-        run: bazel build --config=lint //...
-      - name: Run MyPy Type Checker
-        run: bazel run //tools/lint:mypy -- dex/infrastructure/shared_memory
+      - name: Run Linters
+        run: ./tools/check.sh lint
 
   test-prod:
     runs-on: ubuntu-22.04
@@ -52,7 +50,7 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Production Tests
-        run: bazel test --config=prod //...
+        run: ./tools/check.sh test-prod
 
   test-sanitizers:
     runs-on: ubuntu-22.04
@@ -71,10 +69,4 @@ jobs:
           sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
           sudo chmod +x /usr/local/bin/bazel
       - name: Run Sanitizer Tests (${{ matrix.config }})
-        run: |
-          # TSAN requires ASLR to be disabled
-          if [[ "${{ matrix.config }}" == *"tsan"* ]]; then
-            bazel test --config=${{ matrix.config }} --run_under="setarch $(uname -m) -R" //...
-          else
-            bazel test --config=${{ matrix.config }} //...
-          fi
+        run: ./tools/check.sh test-${{ matrix.config }}
