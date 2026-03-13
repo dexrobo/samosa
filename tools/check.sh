@@ -26,7 +26,7 @@ shift || true
 EXTRA_ARGS=("$@")
 
 # If running in CI, automatically add the CI define to enable optimizations/reduced test sets.
-if [[ "${CI:-}" == "true" ]]; then
+if [[ "${CI:-}" == "true" || "${DOCKER_HOST:-}" == *"docker:2375"* ]]; then
     log "CI environment detected. Enabling CI optimizations."
     EXTRA_ARGS=("--define=ci=true" "${EXTRA_ARGS[@]}")
 fi
