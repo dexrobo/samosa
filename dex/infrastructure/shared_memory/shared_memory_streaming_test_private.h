@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
 
 #include <array>
 
@@ -202,3 +203,4 @@ class SharedMemStreamingTest : public testing::Test {
 };
 
 }  // namespace dex::shared_memory::test
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
 
 #include <functional>
 #include <optional>
@@ -105,3 +106,4 @@ class Monitor {
 #define SHARED_MEMORY_MONITOR_IMPL_H
 #include "dex/infrastructure/shared_memory/shared_memory_monitor_impl.h"
 SHARED_MEMORY_MONITOR_IMPL_H;
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H

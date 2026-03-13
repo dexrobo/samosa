@@ -2,11 +2,14 @@
 
 #include <array>
 #include <cstring>
+#include <string>
+#include <string_view>
 
 namespace dex::shared_memory::detail {
 
 std::string FormatSystemError(std::string_view prefix, int error_code) {
-  std::array<char, 256> buffer = {};
+  constexpr std::size_t kErrorBufferSize = 256;
+  std::array<char, kErrorBufferSize> buffer = {};
   const char* error_string = strerror_r(error_code, buffer.data(), buffer.size());
   return std::string(prefix) + ": " + error_string;
 }

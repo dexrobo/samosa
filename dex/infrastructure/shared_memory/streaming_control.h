@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
 
 // System headers
 #include <atomic>
@@ -98,8 +99,8 @@ class StreamingControl {
     return default_configuration;
   }
 
-  // Update constructor to take Configuration directly instead of optional
-  explicit StreamingControl(const Configuration& configuration);
+  // Update constructor to take Configuration by value and move
+  explicit StreamingControl(Configuration configuration);
   ~StreamingControl();
 
   // Installs the signal handlers for the signals specified in the config.
@@ -120,3 +121,4 @@ class StreamingControl {
 };
 
 }  // namespace dex::shared_memory
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H

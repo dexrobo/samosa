@@ -66,8 +66,10 @@ using LockFreeSharedMetricsBuffer =
     dex::shared_memory::SharedMemory<MetricsBuffer, 1, dex::shared_memory::LockFreeSharedMemoryBuffer>;
 
 // Helper function to run producer process
-void RunProducer(std::string_view shared_memory_name, std::string_view metrics_shared_memory_name,
-                 const uint64_t num_frames, const uint64_t frame_interval) {
+void RunProducer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
+                 std::string_view metrics_shared_memory_name,
+                 const uint64_t num_frames,  // NOLINT(bugprone-easily-swappable-parameters)
+                 const uint64_t frame_interval) {
   auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
   if (!metrics_shared_memory.IsValid()) {
     std::cerr << "Failed to open shared memory for metrics\n";
@@ -93,14 +95,14 @@ void RunProducer(std::string_view shared_memory_name, std::string_view metrics_s
 
     // Store producer timestamp for interval calculation
     if (counter < kMaxMeasurements) {
-      metrics->producer_timestamps[counter] = timestamp;
+      gsl::at(metrics->producer_timestamps, static_cast<gsl::index>(counter)) = timestamp;
     }
   });
 }
 
 // Helper function to run consumer process
-void RunConsumer(std::string_view shared_memory_name, std::string_view metrics_shared_memory_name,
-                 const uint64_t num_frames) {
+void RunConsumer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
+                 std::string_view metrics_shared_memory_name, const uint64_t num_frames) {
   auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
   if (!metrics_shared_memory.IsValid()) {
     std::cerr << "Failed to open shared memory for metrics\n";
@@ -120,12 +122,13 @@ void RunConsumer(std::string_view shared_memory_name, std::string_view metrics_s
 
     if (frame_count < kMaxMeasurements) {
       // Store timestamps and calculate latency
-      metrics->consumer_timestamps[frame_count] = timestamp;
-      metrics->latencies[frame_count] = static_cast<int64_t>(timestamp - buffer.timestamp);
+      const auto idx = static_cast<gsl::index>(frame_count);
+      gsl::at(metrics->consumer_timestamps, idx) = timestamp;
+      gsl::at(metrics->latencies, idx) = static_cast<int64_t>(timestamp - buffer.timestamp);
 
       // Calculate frame_id differences
       if (!first_frame) {
-        metrics->frame_id_differences[frame_count] = static_cast<int64_t>(buffer.frame_id - last_frame_id);
+        gsl::at(metrics->frame_id_differences, idx) = static_cast<int64_t>(buffer.frame_id - last_frame_id);
       }
     }
 
@@ -144,7 +147,8 @@ void RunConsumer(std::string_view shared_memory_name, std::string_view metrics_s
 }
 
 // Helper function to cleanup shared memory segments
-void CleanupSharedMemory(std::string_view shared_memory_name, std::string_view metrics_shared_memory_name) {
+void CleanupSharedMemory(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
+                         std::string_view metrics_shared_memory_name) {
   [[maybe_unused]] const bool result = LockFreeSharedFrameBuffer::Destroy(shared_memory_name);
   [[maybe_unused]] const bool metrics_result = LockFreeSharedMetricsBuffer::Destroy(metrics_shared_memory_name);
 }
@@ -184,12 +188,14 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
   // Create a random generator for unique shared memory names for each iteration
   std::random_device random_device;
   std::mt19937 random_engine(random_device());
-  std::uniform_int_distribution<uint> id_distribution(10000, 99999);
+  constexpr uint kMinId = 10000;
+  constexpr uint kMaxId = 99999;
+  std::uniform_int_distribution<uint> id_distribution(kMinId, kMaxId);
 
   // Counter for iterations within this repetition
   uint64_t iteration_count = 0;
 
-  for (auto _ : state) {
+  for (auto _ : state) {  // NOLINT(readability-identifier-length)
     // Generate random names for each iteration
     const std::string shared_memory_name = "benchmark_shared_memory_" + std::to_string(id_distribution(random_engine));
     const std::string metrics_shared_memory_name =
@@ -247,16 +253,20 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
       std::ofstream csv_file(kCsvFileName, std::ios::app);
       for (size_t i = warmup_frames + 1; i < measurement_frames; ++i) {
         const MeasurementRow row = {
-            frame_interval,
-            num_frames,
-            static_cast<uint64_t>(warmup_frames),
-            iteration_count,        // Current iteration within this repetition
-            repetition_count,       // Current repetition number
-            i - warmup_frames - 1,  // Frame number after warmup
-            static_cast<double>(metrics->latencies[i]),
-            static_cast<double>(metrics->producer_timestamps[i] - metrics->producer_timestamps[i - 1]),
-            static_cast<double>(metrics->consumer_timestamps[i] - metrics->consumer_timestamps[i - 1]),
-            metrics->frame_id_differences[i]};
+            .frame_interval = frame_interval,
+            .num_frames = num_frames,
+            .warmup_frames = warmup_frames,
+            .iteration = iteration_count,
+            .repetition = repetition_count,
+            .frame_number = i - warmup_frames - 1,
+            .latency_ns = static_cast<double>(gsl::at(metrics->latencies, static_cast<gsl::index>(i))),
+            .producer_interval_ns =
+                static_cast<double>(gsl::at(metrics->producer_timestamps, static_cast<gsl::index>(i)) -
+                                    gsl::at(metrics->producer_timestamps, static_cast<gsl::index>(i - 1))),
+            .consumer_interval_ns =
+                static_cast<double>(gsl::at(metrics->consumer_timestamps, static_cast<gsl::index>(i)) -
+                                    gsl::at(metrics->consumer_timestamps, static_cast<gsl::index>(i - 1))),
+            .frame_id_diff = gsl::at(metrics->frame_id_differences, static_cast<gsl::index>(i))};
 
         csv_file << row.frame_interval << "," << row.num_frames << "," << row.warmup_frames << "," << row.iteration
                  << "," << row.repetition << "," << row.frame_number << "," << row.latency_ns << ","
@@ -281,14 +291,17 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
 
 // Register the benchmark
 BENCHMARK(BenchmarkSharedMemoryLatency)
-    ->Args({1, 1000, 100})  // Frame interval in us, # of frames to measure, # of frames to warmup
-    ->Args({1000, 100, 10})
-    ->Args({10000, 100, 10})        // This will take between 1 and 2 minutes
+    ->Args({1, 1000, 100})          // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+    ->Args({1000, 100, 10})         // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+    ->Args({10000, 100, 10})        // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
     ->Iterations(1)                 // Run multiple times for each argument
     ->Repetitions(kNumRepetitions)  // Use the same constant here
     ->Unit(benchmark::kMicrosecond)
-    ->ComputeStatistics("min", [](const std::vector<double>& v) -> double { return *(std::ranges::min_element(v)); })
-    ->ComputeStatistics("max", [](const std::vector<double>& v) -> double { return *(std::ranges::max_element(v)); })
+    ->ComputeStatistics("min",
+                        [](const std::vector<double>& values) -> double { return *(std::ranges::min_element(values)); })
+    ->ComputeStatistics("max",
+                        [](const std::vector<double>& values) -> double { return *(std::ranges::max_element(values)); })
+
     ->DisplayAggregatesOnly(true)
     ->UseRealTime();
 

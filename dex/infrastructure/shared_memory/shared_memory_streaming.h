@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
 
 // System headers
 #include <csignal>  // for signal, SIGINT, SIGTERM
@@ -176,7 +177,7 @@ class Producer {
     requires detail::ProducerFunction<std::remove_reference_t<decltype(produce_fn)>, Buffer>;
 
  private:
-  void ProduceFrame(const uint frame_count, auto&& produce)
+  void ProduceFrame(uint frame_count, auto&& produce)
     requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>;
 
   SharedMemoryBuffer shared_memory_buffer_;
@@ -247,11 +248,11 @@ class Consumer {
 
  private:
   /// @return RunResult
-  [[nodiscard]] RunResult ConsumeFrame(const uint frame_count, auto&& consume, const timespec* timeout = nullptr)
+  [[nodiscard]] RunResult ConsumeFrame(uint frame_count, auto&& consume, const timespec* timeout = nullptr)
     requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume)>, Buffer>;
 
   /// @return RunResult
-  [[nodiscard]] RunResult HandleWaitResult(const detail::WaitResult wait_result);
+  [[nodiscard]] RunResult HandleWaitResult(detail::WaitResult wait_result);
 
   SharedMemoryBuffer shared_memory_buffer_;
   // To get around: cppcoreguidelines-avoid-const-or-ref-data-members
@@ -265,3 +266,4 @@ class Consumer {
 
 #include "dex/infrastructure/shared_memory/shared_memory_streaming_impl.h"
 SHARED_MEM_STREAMING_IMPL_H;
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H

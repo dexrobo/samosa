@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
 
 #include <cmath>  // For std::modf
 
@@ -149,3 +150,4 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 
 // work around for clang-tidy warning "Included header xxxxxx is not used directly"
 #define SHARED_MEMORY_MONITOR_IMPL_H
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H

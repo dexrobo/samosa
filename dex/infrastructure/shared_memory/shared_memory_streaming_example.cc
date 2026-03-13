@@ -29,9 +29,10 @@ using LockFreeSharedDoubleBuffer =
 template <typename Producer>
 void RunProducer(Producer&& producer) {
   // Pre-set camera name in both buffers before starting the loop
-  // TODO: do we need a concept for buffer type?
+  // TODO(unknown): do we need a concept for buffer type?
   std::forward<Producer>(producer).Run([](FrameBuffer& buffer, const uint counter) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    constexpr auto kProducerSleepMs = 5;
+    std::this_thread::sleep_for(std::chrono::milliseconds(kProducerSleepMs));
     const auto timestamp = std::chrono::high_resolution_clock::now().time_since_epoch().count();
     buffer.timestamp = timestamp;
     buffer.frame_id = counter;
@@ -65,9 +66,9 @@ void RunConsumer(Consumer&& consumer, float timeout_seconds = -1.0f) {
  * - destroy: Clean up shared memory
  */
 ////////////////////////////////////////////////////////////////////////////////
-int main(const int argc, const char* argv[]) {
+int main(const int argc, const char* argv[]) {  // NOLINT(bugprone-exception-escape)
   if (argc < 3) {
-    std::cerr << "Usage: " << argv[0] << " \n"
+    std::cerr << "Usage: " << argv[0] << " \n"  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
               << "  create <shmName>\n"
               << "  publisher <shmName>\n"
               << "  consumer <shmName> [timeout_seconds]\n"
@@ -81,10 +82,10 @@ int main(const int argc, const char* argv[]) {
   bool debug = false;
   std::vector<std::string_view> args;
   for (int i = 1; i < argc; ++i) {
-    if (std::string_view(argv[i]) == "--debug") {
+    if (std::string_view(argv[i]) == "--debug") {  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
       debug = true;
     } else {
-      args.emplace_back(argv[i]);
+      args.emplace_back(argv[i]);  // NOLINT(cppcoreguidelines-pro-bounds-pointer-arithmetic)
     }
   }
 
@@ -121,7 +122,7 @@ int main(const int argc, const char* argv[]) {
     for (auto& buffer : dex::shared_memory::detail::GetBuffers(shared_memory)) {
       const size_t copy_size = std::min(camera_name.size(), kNameLength - 1);
       std::memcpy(buffer.camera_name.data(), camera_name.data(), copy_size);
-      buffer.camera_name[copy_size] = '\0';  // Ensure null termination
+      gsl::at(buffer.camera_name, static_cast<gsl::index>(copy_size)) = '\0';  // Ensure null termination
     }
 
     RunProducer(producer);

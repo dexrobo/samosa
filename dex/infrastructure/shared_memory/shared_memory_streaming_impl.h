@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
 
 #include "spdlog/spdlog.h"
 
@@ -84,7 +85,9 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
       (last_write == detail::BufferState::BufferA) ? detail::BufferState::BufferB : detail::BufferState::BufferA;
 
   auto next_read = detail::ToBufferState(shared_memory_buffer_.Get()->read_index.load(std::memory_order_acquire));
-  if (next_read == detail::BufferState::Unavailable) next_write = detail::BufferState::BufferA;
+  if (next_read == detail::BufferState::Unavailable) {
+    next_write = detail::BufferState::BufferA;
+  }
 
   // Set the writing flag while preserving the sequence
   if constexpr (requires { shared_memory_buffer_.Get()->sequence_and_writing; }) {
@@ -93,7 +96,7 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
 
   SPDLOG_DEBUG("[{}, {}] producing frame...", frame_count, ToInt(next_write));
   detail::InvokeProducer(std::forward<decltype(produce)>(produce),
-                         shared_memory_buffer_.Get()->buffers[detail::ToBufferIndex(next_write)], frame_count,
+                         gsl::at(shared_memory_buffer_.Get()->buffers, detail::ToBufferIndex(next_write)), frame_count,
                          detail::ToInt(next_write));
   SPDLOG_DEBUG("[{}, {}] producing frame... done", frame_count, ToInt(next_write));
 
@@ -227,8 +230,8 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeFra
   if (streaming_control_.get().IsRunning()) {
     SPDLOG_DEBUG("[{}, {}] processing frame...", frame_count, ToInt(current_write));
     detail::InvokeConsumer(std::forward<decltype(consume)>(consume),
-                           shared_memory_buffer_.Get()->buffers[detail::ToBufferIndex(current_write)], frame_count,
-                           detail::ToInt(current_write));
+                           gsl::at(shared_memory_buffer_.Get()->buffers, detail::ToBufferIndex(current_write)),
+                           frame_count, detail::ToInt(current_write));
     SPDLOG_DEBUG("[{}, {}] processing frame... done", frame_count, ToInt(current_write));
     return RunResult::Success;
   }
@@ -239,3 +242,4 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeFra
 
 // work around for clang-tidy warning "Included header xxxxxx is not used directly"
 #define SHARED_MEM_STREAMING_IMPL_H
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H

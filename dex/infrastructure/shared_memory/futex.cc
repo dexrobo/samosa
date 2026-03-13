@@ -14,9 +14,11 @@ namespace dex::shared_memory::detail {
 /// Futex helper functions (Linux-specific) for conditional synchronization.
 ////////////////////////////////////////////////////////////////////////////////
 // Wait on the futex at addr until *addr != expected.
-WaitResult FutexWait(const std::atomic<uint32_t>& futex, const int expected_state, const timespec* timeout) {
+WaitResult FutexWait(const std::atomic<uint32_t>& futex, int expected_state, const timespec* timeout) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
   const int64_t result = syscall(SYS_futex, &futex, FUTEX_WAIT, expected_state, timeout, nullptr, 0);
   const int error_number = errno;
+
   if (result == 0) {
     // Normal wake-up via FUTEX_WAKE
     SPDLOG_DEBUG("futex_wait: FUTEX_WAKE");
@@ -42,7 +44,8 @@ WaitResult FutexWait(const std::atomic<uint32_t>& futex, const int expected_stat
   }
 }
 
-bool FutexWake(const std::atomic<uint32_t>& futex, const int count) {
+bool FutexWake(const std::atomic<uint32_t>& futex, int count) {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-vararg)
   const int64_t result = syscall(SYS_futex, &futex, FUTEX_WAKE, count, nullptr, nullptr, 0);
   if (result == -1) {
     // LCOV_EXCL_START
