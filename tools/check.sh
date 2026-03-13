@@ -28,54 +28,54 @@ EXTRA_ARGS=("$@")
 # If running in CI, automatically add the CI define to enable optimizations/reduced test sets.
 if [[ "${CI:-}" == "true" || "${DOCKER_HOST:-}" == *"docker:2375"* ]]; then
     log "CI environment detected. Enabling CI optimizations."
-    EXTRA_ARGS=("--define=ci=true" "${EXTRA_ARGS[@]}")
+    EXTRA_ARGS=("--define=ci=true" "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}")
 fi
 
 case "$PART" in
     format)
         log "Running all formatters..."
-        bazel run //tools/format "${EXTRA_ARGS[@]}"
+        bazel run //tools/format "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     lint)
         log "Running Ruff linter..."
-        bazel build --config=lint //... "${EXTRA_ARGS[@]}"
+        bazel build --config=lint //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         log "Running MyPy type checker..."
         # MyPy is run via 'bazel run', so it needs EXTRA_ARGS before the '--' separator.
-        bazel run //tools/lint:mypy "${EXTRA_ARGS[@]}" -- dex/infrastructure/shared_memory
+        bazel run //tools/lint:mypy "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}" -- dex/infrastructure/shared_memory
         ;;
     test-prod)
         log "Running production tests..."
-        bazel test --config=prod //... "${EXTRA_ARGS[@]}"
+        bazel test --config=prod //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-asan)
         log "Running ASAN tests (static)..."
-        bazel test --config=asan //... "${EXTRA_ARGS[@]}"
+        bazel test --config=asan //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-asan-dynamic)
         log "Running ASAN tests (dynamic)..."
-        bazel test --config=asan-dynamic //... "${EXTRA_ARGS[@]}"
+        bazel test --config=asan-dynamic //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-tsan)
         log "Running TSAN tests (static)..."
-        bazel test --config=tsan --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]}"
+        bazel test --config=tsan --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-tsan-dynamic)
         log "Running TSAN tests (dynamic)..."
-        bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]}"
+        bazel test --config=tsan-dynamic --run_under="setarch $(uname -m) -R" //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-ubsan)
         log "Running UBSAN tests..."
-        bazel test --config=ubsan //... "${EXTRA_ARGS[@]}"
+        bazel test --config=ubsan //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     all)
-        "$0" format "${EXTRA_ARGS[@]}"
-        "$0" lint "${EXTRA_ARGS[@]}"
-        "$0" test-prod "${EXTRA_ARGS[@]}"
-        "$0" test-asan "${EXTRA_ARGS[@]}"
-        "$0" test-asan-dynamic "${EXTRA_ARGS[@]}"
-        "$0" test-tsan "${EXTRA_ARGS[@]}"
-        "$0" test-tsan-dynamic "${EXTRA_ARGS[@]}"
-        "$0" test-ubsan "${EXTRA_ARGS[@]}"
+        "$0" format "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" lint "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-prod "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-asan "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-asan-dynamic "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-tsan "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-tsan-dynamic "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        "$0" test-ubsan "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     *)
         error "Unknown check part: $PART"
