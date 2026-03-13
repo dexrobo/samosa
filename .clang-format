@@ -1,0 +1,36 @@
+BasedOnStyle: Google
+ColumnLimit: 120
+InsertNewlineAtEOF: true
+
+# The Google Style Guide only asks for consistency w.r.t. "const west" vs. "east const" alignment of cv-qualifiers.
+# In this repository we use "const west".
+QualifierAlignment: Custom
+QualifierOrder: [friend, inline, static, constexpr, const, volatile, type, restrict]
+
+# The Google Style Guide only asks for consistency of pointer alignment.
+# In this repository we use left pointer alignment.
+DerivePointerAlignment: false
+PointerAlignment: Left
+RemoveParentheses: ReturnStatement
+KeepEmptyLines:
+  AtStartOfFile: false
+RemoveSemicolon: true
+SeparateDefinitionBlocks: Always
+RemoveEmptyLinesInUnwrappedLines: true
+WrapNamespaceBodyWithEmptyLines: Always
+
+# Needed to keep parentheses around macro arguments
+Macros:
+  - ASSERT_NO_THROW(a) = a
+  - EXPECT_NO_THROW(a) = a
+  - MOCK_METHOD(a, b, c, d) = ab c d
+
+IncludeCategories:
+  - Regex: '^<.*\.h>'
+    Priority: 1
+  - Regex: '^<.*'
+    Priority: 2
+  - Regex: '^"dex/.*'
+    Priority: 4
+  - Regex: '.*'
+    Priority: 3

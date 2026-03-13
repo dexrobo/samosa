@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: bazel-format
+        name: Bazel Format (rules_lint)
+        entry: bazel
+        args: ["run", "//tools/format"]
+        language: system
+        types: [text]

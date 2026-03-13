@@ -1,0 +1,6 @@
+CompileFlags:
+  Add: [-ferror-limit=0, -Wno-missing-designated-field-initializers]
+  BuiltinHeaders: QueryDriver
+  CompilationDatabase: ${workspaceFolder}/
+Completion:
+  HeaderInsertion: Never

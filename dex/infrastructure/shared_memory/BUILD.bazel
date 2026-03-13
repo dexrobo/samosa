@@ -1,0 +1,238 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+# External requirements
+# Note: In standalone MODULE.bazel, these map to their BCR names
+SPDLOG = "@com_github_gabime_spdlog//:spdlog"
+
+GSL = "@com_github_microsoft_gsl//:gsl"
+
+GTEST = "@com_google_googletest//:gtest_main"
+
+BENCHMARK = "@com_github_google_benchmark//:benchmark"
+
+ABSL_STRINGS = "@com_google_absl//absl/strings"
+
+cc_library(
+    name = "shared_memory_private",
+    srcs = ["shared_memory_private.cc"],
+    hdrs = ["shared_memory_private.h"],
+)
+
+cc_library(
+    name = "shared_memory",
+    srcs = ["shared_memory_impl.h"],
+    hdrs = ["shared_memory.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":shared_memory_private",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_library(
+    name = "futex",
+    srcs = ["futex.cc"],
+    hdrs = ["futex.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":shared_memory_private",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_library(
+    name = "shared_memory_streaming",
+    srcs = [
+        "shared_memory_streaming_impl.h",
+        "streaming_control.cc",
+    ],
+    hdrs = [
+        "shared_memory_streaming.h",
+        "streaming_control.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":futex",
+        ":shared_memory",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_binary(
+    name = "shared_memory_streaming_example",
+    srcs = ["shared_memory_streaming_example.cc"],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_test",
+    size = "small",
+    srcs = ["shared_memory_test.cc"],
+    # This test intercepts system calls using dlsym(RTLD_NEXT, ...), which doesn't work with
+    # static sanitizers. Use --config=asan_dynamic or --config=tsan_dynamic instead of
+    # --config=asan or --config=tsan to test with sanitizers.
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":shared_memory",
+        SPDLOG,
+        GTEST,
+    ],
+)
+
+cc_test(
+    name = "futex_test",
+    size = "small",
+    srcs = ["futex_test.cc"],
+    deps = [
+        ":futex",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "shared_memory_streaming_test_private",
+    hdrs = ["shared_memory_streaming_test_private.h"],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+        GTEST,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_streaming_test",
+    size = "small",
+    srcs = ["shared_memory_streaming_test.cc"],
+    copts = [
+        "-Wno-stringop-overflow",
+    ],
+    env = {"GCOV_CHILD_FORK": "1"},
+    flaky = True,
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:asan_dynamic_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)
+
+# This test runs a suite of tests with variable delays.
+# This could take a long time to run with sanitizers.
+cc_test(
+    name = "shared_memory_streaming_delay_test",
+    size = "small",
+    srcs = ["shared_memory_streaming_delay_test.cc"],
+    copts = [
+        "-Wno-stringop-overflow",
+    ],
+    env = select({
+        "//:ci_config": {
+            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+            "REDUCED_TEST_SET": "1",
+        },
+        "//conditions:default": {
+            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+        },
+    }),
+    flaky = True,
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:asan_dynamic_config": ["@platforms//:incompatible"],
+        # TODO: Frequently fails in coverage job even though it is marked flaky
+        "//:gcov_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//:ubsan_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)
+
+cc_binary(
+    name = "shared_memory_streaming_benchmark",
+    srcs = ["shared_memory_streaming_benchmark.cc"],
+    copts = [
+        "-Wno-stringop-overflow",
+    ],
+    deps = [
+        ":shared_memory_streaming",
+        SPDLOG,
+        BENCHMARK,
+    ],
+)
+
+py_binary(
+    name = "format_benchmark_stats",
+    srcs = ["format_benchmark_stats.py"],
+)
+
+sh_binary(
+    name = "run_benchmark_with_stats",
+    srcs = ["run_benchmark_with_stats.sh"],
+    args = [
+        "$(rootpath :shared_memory_streaming_benchmark)",
+        "$(rootpath :format_benchmark_stats)",
+    ],
+    data = [
+        ":format_benchmark_stats",
+        ":shared_memory_streaming_benchmark",
+    ],
+)
+
+cc_library(
+    name = "shared_memory_monitor",
+    srcs = ["shared_memory_monitor_impl.h"],
+    hdrs = ["shared_memory_monitor.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":futex",
+        ":shared_memory",
+        ":shared_memory_streaming",
+        SPDLOG,
+        GSL,
+    ],
+)
+
+cc_test(
+    name = "shared_memory_monitor_test",
+    size = "small",
+    srcs = ["shared_memory_monitor_test.cc"],
+    env = {"GCOV_CHILD_FORK": "1"},
+    flaky = True,
+    deps = [
+        ":shared_memory_monitor",
+        ":shared_memory_streaming",
+        ":shared_memory_streaming_test_private",
+        SPDLOG,
+        ABSL_STRINGS,
+        GTEST,
+    ],
+)

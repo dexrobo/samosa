@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  format:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg build-essential python3 nodejs
+      - name: Install Bazelisk
+        run: |
+          sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+      - name: Run Formatters
+        run: ./tools/check.sh format --define=ci=true
+
+  lint:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg build-essential python3
+      - name: Install Bazelisk
+        run: |
+          sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+      - name: Run Linters
+        run: ./tools/check.sh lint --define=ci=true
+
+  test-prod:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg build-essential gcc-12 g++-12
+      - name: Install Bazelisk
+        run: |
+          sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+      - name: Run Production Tests
+        run: ./tools/check.sh test-prod --define=ci=true
+
+  test-sanitizers:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [asan, asan-dynamic, tsan, tsan-dynamic, ubsan]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg build-essential gcc-12 g++-12
+      - name: Install Bazelisk
+        run: |
+          sudo curl -Lo /usr/local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-amd64
+          sudo chmod +x /usr/local/bin/bazel
+      - name: Run Sanitizer Tests (${{ matrix.config }})
+        run: ./tools/check.sh test-${{ matrix.config }} --define=ci=true

@@ -1,0 +1,99 @@
+load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
+
+package(default_visibility = ["//visibility:public"])
+
+genrule(
+    name = "ruff_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@ruff_arm64//file"],
+        "//conditions:default": ["@ruff_amd64//file"],
+    }),
+    outs = ["ruff_executable"],
+    cmd = "MEMBER=$$(tar -tf $< | grep '/ruff$$') && tar -xzf $< --to-stdout $$MEMBER > $@",
+    executable = True,
+)
+
+alias(
+    name = "ruff",
+    actual = ":ruff_bin",
+)
+
+alias(
+    name = "buildifier",
+    actual = "@buildifier_prebuilt//:buildifier",
+)
+
+genrule(
+    name = "yamlfmt_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@yamlfmt_arm64//file"],
+        "//conditions:default": ["@yamlfmt_amd64//file"],
+    }),
+    outs = ["yamlfmt_executable"],
+    cmd = "MEMBER=$$(tar -tf $< | grep 'yamlfmt$$') && tar -xzf $< --to-stdout $$MEMBER > $@",
+    executable = True,
+)
+
+alias(
+    name = "yamlfmt",
+    actual = ":yamlfmt_bin",
+)
+
+genrule(
+    name = "shfmt_bin",
+    srcs = select({
+        "@platforms//cpu:aarch64": ["@shfmt_arm64//file"],
+        "//conditions:default": ["@shfmt_amd64//file"],
+    }),
+    outs = ["shfmt_executable"],
+    cmd = "cp $< $@",
+    executable = True,
+)
+
+alias(
+    name = "shfmt",
+    actual = ":shfmt_bin",
+)
+
+# Taplo selection
+genrule(
+    name = "taplo_bin",
+    srcs = select({
+        "@platforms//os:osx": ["@taplo_mac//file"],
+        "//conditions:default": ["@taplo//file"],
+    }),
+    outs = ["taplo_executable"],
+    cmd = "gunzip -c $< > $@",
+    executable = True,
+)
+
+# Markdownlint selection
+sh_binary(
+    name = "markdownlint",
+    srcs = ["markdownlint.sh"],
+    data = [
+        "@bazel_tools//tools/bash/runfiles",
+        "@markdownlint-cli2//:pkg",
+    ],
+)
+
+sh_binary(
+    name = "clang_format",
+    srcs = ["clang_format.sh"],
+    data = [
+        "@bazel_tools//tools/bash/runfiles",
+        "@llvm_toolchain_llvm//:bin/clang-format",
+    ],
+)
+
+format_multirun(
+    name = "format",
+    cc = ":clang_format",
+    markdown = ":markdownlint",
+    python = ":ruff",
+    shell = ":shfmt",
+    starlark = ":buildifier",
+    toml = ":taplo_bin",
+    yaml = ":yamlfmt",
+)

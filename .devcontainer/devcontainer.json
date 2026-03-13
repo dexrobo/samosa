@@ -1,0 +1,19 @@
+{
+    "name": "Samosa Linux Env",
+    "build": {
+        "dockerfile": "Dockerfile",
+        "context": ".."
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "bazelbuild.vscode-bazel",
+                "ms-vscode.cpptools",
+                "ms-python.python",
+                "charliermarsh.ruff"
+            ]
+        }
+    },
+    "remoteUser": "vscode",
+    "features": {}
+}
