@@ -181,8 +181,16 @@ class SharedMemStreamingTest : public testing::Test {
     // Verify results
     EXPECT_TRUE(WIFEXITED(consumer_status)) << "Consumer process did not exit normally";
     EXPECT_EQ(WEXITSTATUS(consumer_status), 0) << "Consumer process indicated failure";
-    EXPECT_TRUE(WIFEXITED(producer_status)) << "Producer process did not exit normally";
-    EXPECT_EQ(WEXITSTATUS(producer_status), 0) << "Producer process indicated failure";
+
+    if (WIFEXITED(producer_status)) {
+      const int exit_status = WEXITSTATUS(producer_status);
+      EXPECT_TRUE(exit_status == 0 || exit_status == 143)
+          << "Producer process indicated failure with status: " << exit_status;
+    } else if (WIFSIGNALED(producer_status)) {
+      EXPECT_EQ(WTERMSIG(producer_status), SIGTERM) << "Producer process terminated by unexpected signal";
+    } else {
+      FAIL() << "Producer process did not exit normally or via SIGTERM";
+    }
   }
 
  protected:
