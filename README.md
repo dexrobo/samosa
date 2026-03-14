@@ -10,6 +10,12 @@ Samosa is a high-performance C++20 library designed for ultra-low latency data s
 - **Lock-Free Internals**: Uses atomic operations and Linux futexes for synchronization, avoiding heavy kernel locks.
 - **Double-Buffered**: Implements internal double-buffering to ensure the consumer never reads a partially written frame.
 
+## Requirements
+
+- **Operating System**: Linux (Kernel 2.6.22+ required for `futex` support).
+- **Compiler**: GCC 12+ or Clang 14+ (C++20 support required).
+- **Build System**: [Bazel](https://bazel.build/).
+
 ## Usage
 
 ### 1. Define your Data Structure
@@ -17,7 +23,7 @@ The data structure must be a "Plain Old Data" (POD) type suitable for shared mem
 
 ```cpp
 #include <array>
-#include <cstddef>
+#include <cstdint>
 
 struct Telemetry {
   uint64_t timestamp_ns;
@@ -27,7 +33,7 @@ struct Telemetry {
 ```
 
 ### 2. Initialize the Shared Memory Segment
-One process (usually the producer or a manager) must create the segment.
+One process (usually a manager or the first producer) creates the segment.
 
 ```cpp
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
@@ -38,42 +44,60 @@ using dex::shared_memory::InitializeBuffer;
 
 const std::string shm_name = "/telemetry_stream";
 
-// Create the segment (or fail if it exists)
+// Create the segment
 auto shm = SharedMemory<Telemetry, 2, LockFreeSharedMemoryBuffer>::Create(
     shm_name, InitializeBuffer<Telemetry>);
 ```
 
 ### 3. Publish Data
-The `Producer::Run` method is a **blocking call** that enters a continuous loop. It executes the provided callable every time a new buffer is ready to be populated.
+The `Producer::Run` method enters a continuous loop, invoking your callback whenever a buffer is ready for the next frame.
 
 ```cpp
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
+// Producer automatically opens the existing segment by name
 dex::shared_memory::Producer<Telemetry> producer{shm_name};
 
-// This call blocks until the process receives a termination signal (SIGINT/SIGTERM)
-producer.Run([](Telemetry& buffer, uint32_t frame_count, int buffer_id) {
-    // The callable is executed continuously to populate each new frame
+// Run takes a callback with several supported signatures:
+// - [](Telemetry& buffer)
+// - [](Telemetry& buffer, uint counter)
+// - [](Telemetry& buffer, uint counter, int buffer_id)
+producer.Run([](Telemetry& buffer, uint counter) {
     buffer.timestamp_ns = GetTimeNs();
-    // Fill buffer...
+    // Fill pose and payload...
+    std::cout << "Publishing frame: " << counter << std::endl;
 });
 ```
 
 ### 4. Consume Data
-The `Consumer::Run` method is also a **blocking call**. It waits for the producer to publish new data and then executes the provided callable to process the latest snapshot.
+The `Consumer::Run` method waits for new snapshots and executes your callback. It automatically handles frame skipping if the producer is faster than the consumer.
 
 ```cpp
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
 dex::shared_memory::Consumer<Telemetry> consumer{shm_name};
 
-// This call blocks and waits for new snapshots from the producer
-consumer.Run([](const Telemetry& buffer) {
-    // This callable is executed continuously for every new snapshot received.
-    // Note: If the producer is faster than the consumer, intermediate frames 
-    // are automatically skipped to ensure the consumer always gets the latest state.
-    std::cout << "Received snapshot at: " << buffer.timestamp_ns << std::endl;
+// Run blocks until interrupted or a timeout occurs.
+// Supported signatures:
+// - [](const Telemetry& buffer)
+// - [](const Telemetry& buffer, uint counter)
+// - [](const Telemetry& buffer, uint counter, int buffer_id)
+consumer.Run([](const Telemetry& buffer, uint counter) {
+    std::cout << "Received snapshot " << counter 
+              << " at: " << buffer.timestamp_ns << std::endl;
 });
+```
+
+## Performance & Benchmarking
+
+Samosa includes a specialized benchmarking tool to measure end-to-end latency and frame-skip statistics under various loads.
+
+```bash
+# Run the benchmark
+bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_benchmark
+
+# Post-process results to generate statistics
+./dex/infrastructure/shared_memory/run_benchmark_with_stats.sh
 ```
 
 ## Contributing
@@ -81,19 +105,14 @@ consumer.Run([](const Telemetry& buffer) {
 We welcome contributions! To ensure high standards of correctness and performance, please follow these steps:
 
 ### Development Environment
-The easiest way to contribute is using the provided **Dev Container**. It contains all necessary dependencies (Bazel, GCC 12, Python, Node.js).
+The easiest way to contribute is using the provided **Dev Container**. It contains all necessary dependencies (Bazel, GCC 12, Python, Node.js) and a pre-configured Linux environment.
 
 ### Verification
-Before submitting a Pull Request, you **must** run the comprehensive verification suite. This script runs all formatters, linters (Ruff, MyPy, and Clang-Tidy), and test configurations (including ASAN, TSAN, and UBSAN).
+Before submitting a Pull Request, you **must** run the comprehensive verification suite.
 
 ```bash
-# Run everything
+# Run all formatters, linters, and tests
 ./tools/check.sh all
-
-# Or run specific parts
-./tools/check.sh format
-./tools/check.sh lint
-./tools/check.sh test-prod
 ```
 
 ### PR Guidelines

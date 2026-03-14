@@ -48,7 +48,7 @@ struct MetricsBuffer {
 
 // Add this struct after BenchmarkState definition
 struct MeasurementRow {
-  uint64_t frame_interval;
+  uint64_t frame_interval_us;
   uint64_t num_frames;
   uint64_t warmup_frames;
   uint64_t iteration;
@@ -69,7 +69,7 @@ using LockFreeSharedMetricsBuffer =
 void RunProducer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
                  std::string_view metrics_shared_memory_name,
                  const uint64_t num_frames,  // NOLINT(bugprone-easily-swappable-parameters)
-                 const uint64_t frame_interval) {
+                 const uint64_t frame_interval_us) {
   auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
   if (!metrics_shared_memory.IsValid()) {
     std::cerr << "Failed to open shared memory for metrics\n";
@@ -83,7 +83,7 @@ void RunProducer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily
       _exit(0);
     }
     // Small sleep to simulate work
-    std::this_thread::sleep_for(std::chrono::microseconds(frame_interval));
+    std::this_thread::sleep_for(std::chrono::microseconds(frame_interval_us));
 
     // Get current timestamp
     const auto now = std::chrono::steady_clock::now();
@@ -181,7 +181,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
   // Static counter for repetitions that persists between benchmark calls
   static uint64_t repetition_count = 0;
 
-  const uint64_t frame_interval = state.range(0);
+  const uint64_t frame_interval_us = state.range(0);
   const uint64_t num_frames = state.range(1);
   const auto warmup_frames = static_cast<size_t>(state.range(2));
 
@@ -228,7 +228,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
       break;
     }
     if (producer_pid == 0) {  // Producer child process
-      RunProducer(shared_memory_name, metrics_shared_memory_name, num_frames, frame_interval);
+      RunProducer(shared_memory_name, metrics_shared_memory_name, num_frames, frame_interval_us);
       _exit(0);
     }
 
@@ -253,7 +253,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
       std::ofstream csv_file(kCsvFileName, std::ios::app);
       for (size_t i = warmup_frames + 1; i < measurement_frames; ++i) {
         const MeasurementRow row = {
-            .frame_interval = frame_interval,
+            .frame_interval_us = frame_interval_us,
             .num_frames = num_frames,
             .warmup_frames = warmup_frames,
             .iteration = iteration_count,
@@ -268,7 +268,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
                                     gsl::at(metrics->consumer_timestamps, static_cast<gsl::index>(i - 1))),
             .frame_id_diff = gsl::at(metrics->frame_id_differences, static_cast<gsl::index>(i))};
 
-        csv_file << row.frame_interval << "," << row.num_frames << "," << row.warmup_frames << "," << row.iteration
+        csv_file << row.frame_interval_us << "," << row.num_frames << "," << row.warmup_frames << "," << row.iteration
                  << "," << row.repetition << "," << row.frame_number << "," << row.latency_ns << ","
                  << row.producer_interval_ns << "," << row.consumer_interval_ns << "," << row.frame_id_diff << "\n";
       }
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
   // Truncate the file and write headers
   {
     std::ofstream init_file(kCsvFileName);
-    init_file << "frame_interval,num_frames,warmup_frames,iteration,repetition,frame_number,"
+    init_file << "frame_interval_us,num_frames,warmup_frames,iteration,repetition,frame_number,"
               << "latency_ns,producer_interval_ns,consumer_interval_ns,frame_id_diff\n";
   }
 
