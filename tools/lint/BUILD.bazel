@@ -3,9 +3,18 @@ load("@rules_python//python:defs.bzl", "py_binary")
 
 package(default_visibility = ["//visibility:public"])
 
+alias(
+    name = "clang-tidy",
+    actual = "@llvm_toolchain_llvm//:clang-tidy",
+)
+
+# MyPy type checker target.
+# Executes MyPy hermetically using the project's python toolchain.
 py_binary(
     name = "mypy",
-    srcs = ["mypy_main.py"],
+    srcs = [
+        "mypy_main.py",
+    ],
     data = ["//dex/infrastructure/shared_memory:format_benchmark_stats"],
     main = "mypy_main.py",
     deps = [
@@ -15,9 +24,13 @@ py_binary(
     ],
 )
 
+# Ruff linter target.
+# Executes Ruff hermetically using the project's python toolchain.
 py_binary(
     name = "ruff",
-    srcs = ["ruff_main.py"],
+    srcs = [
+        "ruff_main.py",
+    ],
     main = "ruff_main.py",
     deps = [
         requirement("ruff"),

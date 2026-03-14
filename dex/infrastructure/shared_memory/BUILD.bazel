@@ -5,7 +5,6 @@ load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 package(default_visibility = ["//visibility:public"])
 
 # External requirements
-# Note: In standalone MODULE.bazel, these map to their BCR names
 SPDLOG = "@com_github_gabime_spdlog//:spdlog"
 
 GSL = "@com_github_microsoft_gsl//:gsl"

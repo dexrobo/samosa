@@ -1,4 +1,5 @@
-#pragma once
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
 
 // System headers
 #include <fcntl.h>     // for O_RDWR, O_CREAT
@@ -80,9 +81,10 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
 ////////////////////////////////////////////////////////////////////////////////
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
-SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const std::string_view name, const bool create,
-                                                                    detail::BufferCallback<BufferType> init,
-                                                                    detail::BufferCallback<BufferType> validate)
+SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(
+    std::string_view name, bool create,
+    detail::BufferCallback<BufferType> init,  // NOLINT(bugprone-easily-swappable-parameters)
+    detail::BufferCallback<BufferType> validate)
     : state_{.name = std::string(name)} {
   if (!OpenFile(create)) {
     Cleanup();
@@ -90,18 +92,18 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const std::s
   }
 
   if (!create) {
-    struct stat st = {};
-    if (fstat(*state_.file_descriptor, &st) != 0) {
+    struct stat file_stat = {};
+    if (fstat(*state_.file_descriptor, &file_stat) != 0) {
       SPDLOG_ERROR("fstat error: {}", detail::FormatSystemError("fstat error", errno));
       Cleanup();
       return;
     }
 
-    if (static_cast<size_t>(st.st_size) != state_.size) {
+    if (static_cast<size_t>(file_stat.st_size) != state_.size) {
       SPDLOG_ERROR(
           "Shared memory size mismatch for {}: expected {} bytes, got {} bytes. This indicates a "
           "version mismatch between producer and consumer. Please ensure both are running the same version.",
-          state_.name, state_.size, st.st_size);
+          state_.name, state_.size, file_stat.st_size);
       Cleanup();
       return;
     }
@@ -115,7 +117,9 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const std::s
 
   if (!MapMemory()) {
     Cleanup();
-    if (create) shm_unlink(state_.name.c_str());
+    if (create) {
+      shm_unlink(state_.name.c_str());
+    }
     return;
   }
 
@@ -197,7 +201,9 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::InitializeBuffer(
     detail::BufferCallback<BufferType> callback) {
-  if (!state_.buffer) return false;
+  if (!state_.buffer) {
+    return false;
+  }
 
   // Use NullCallback if nullptr is passed
   auto initialization_function = callback ? callback : NullCallback<BufferType>;
@@ -208,7 +214,9 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::ValidateBuffer(
     detail::BufferCallback<BufferType> callback) {
-  if (!state_.buffer) return false;
+  if (!state_.buffer) {
+    return false;
+  }
 
   // Use NullCallback if nullptr is passed
   auto validation_function = callback ? callback : NullCallback<BufferType>;
@@ -217,4 +225,5 @@ bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::ValidateBuffer(
 
 }  // namespace dex::shared_memory
 
-#define SHARED_MEMORY_IMPL_H
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
+

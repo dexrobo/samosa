@@ -7,3 +7,6 @@ ignore = []
 
 # Tighten rules
 select = ["ALL"]
+
+[lint.per-file-ignores]
+"**/*.py" = ["INP001"]

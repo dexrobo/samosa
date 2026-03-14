@@ -1,4 +1,13 @@
-#pragma once
+/**
+ * @file shared_memory.h
+ * @brief Core primitives for lock-free snapshot streaming via shared memory.
+ *
+ * This library is optimized for streaming snapshots of POD types between processes.
+ * It is not a general-purpose IPC queue; consumers always jump to the latest state.
+ */
+
+#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
+#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
 
 #include <unistd.h>  // for close
 
@@ -89,7 +98,7 @@ class SharedMemory {
    * @param name Name of the shared memory segment to destroy.
    * @return true if the shared memory was successfully unlinked, false otherwise.
    */
-  [[nodiscard]] static bool Destroy(const std::string_view name);
+  [[nodiscard]] static bool Destroy(std::string_view name);
 
   /**
    * @brief Retrieves a pointer to the mapped lock-free shared memory buffer.
@@ -105,9 +114,11 @@ class SharedMemory {
    */
   [[nodiscard]] bool IsValid() const { return state_.initialized; }
 
-  // Prevent copying
+  // Prevent copying and moving
   SharedMemory(const SharedMemory&) = delete;
   SharedMemory& operator=(const SharedMemory&) = delete;
+  SharedMemory(SharedMemory&&) = delete;
+  SharedMemory& operator=(SharedMemory&&) = delete;
 
  private:
   /**
@@ -117,9 +128,10 @@ class SharedMemory {
    * @param init_callback Callback function to initialize the buffer (only used when create is true)
    * @param validate_callback Callback function to validate the buffer (only used when create is false)
    */
-  explicit SharedMemory(const std::string_view name, const bool create,
-                        detail::BufferCallback<BufferType> init = nullptr,
-                        detail::BufferCallback<BufferType> validate = nullptr);
+  explicit SharedMemory(
+      std::string_view name, bool create,
+      detail::BufferCallback<BufferType> init = nullptr,  // NOLINT(bugprone-easily-swappable-parameters)
+      detail::BufferCallback<BufferType> validate = nullptr);
 
   struct State {
     std::string name;
@@ -131,7 +143,7 @@ class SharedMemory {
   } state_;
 
   // State transition methods
-  [[nodiscard]] bool OpenFile(const bool create);
+  [[nodiscard]] bool OpenFile(bool create);
   [[nodiscard]] bool InitializeSize();
   [[nodiscard]] bool MapMemory();
   [[nodiscard]] bool InitializeBuffer(detail::BufferCallback<BufferType> callback);
@@ -141,8 +153,7 @@ class SharedMemory {
 
 }  // namespace dex::shared_memory
 
-// work around for clang-tidy warning "Included header xxxxxx is not used directly"
-#define SHARED_MEMORY_IMPL_H
-
 #include "dex/infrastructure/shared_memory/shared_memory_impl.h"
-SHARED_MEMORY_IMPL_H;
+
+#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
+
