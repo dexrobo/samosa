@@ -2,6 +2,7 @@
 """Format benchmark statistics from detailed per-frame CSV measurements."""
 
 import csv
+import json
 import logging
 import math
 import os
@@ -46,11 +47,12 @@ def calculate_stats(values: list[float]) -> dict[str, float] | None:
     }
 
 
-def format_benchmark_stats(input_file: str) -> None:
+def format_benchmark_stats(input_file: str, output_json: str | None = None) -> None:
     """Format benchmark statistics from detailed per-frame CSV measurements.
 
     Args:
         input_file: Path to the CSV file containing per-frame measurements.
+        output_json: Optional path to save the summary statistics as a JSON file.
 
     """
     workspace = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
@@ -83,10 +85,12 @@ def format_benchmark_stats(input_file: str) -> None:
             key = (int(row["frame_interval_us"]), int(row["num_frames"]))
             groups[key].append(row)
 
-        for (frame_interval, num_frames), group_data in groups.items():
+        all_summaries = []
+
+        for (frame_interval_us, num_frames), group_data in groups.items():
             total_frames = len(group_data)
             logger.info("\nBenchmark parameters:")
-            logger.info("  Frame generation interval: %s us", f"{frame_interval:,}")
+            logger.info("  Frame generation interval: %s us", f"{frame_interval_us:,}")
             logger.info("  Frames per run: %s", f"{num_frames:,}")
             logger.info("  Total frames processed: %s", f"{total_frames:,}")
 
@@ -97,7 +101,7 @@ def format_benchmark_stats(input_file: str) -> None:
             logger.info("  Non-skipped frames: %s", f"{non_skipped:,}")
             logger.info("  Skipped frames: %s", f"{skipped:,}")
 
-            metrics = {
+            metrics_data = {
                 "latency (ns)": [row["latency_ns"] for row in group_data],
                 "producer_interval (ns)": [row["producer_interval_ns"] for row in group_data],
                 "consumer_interval (ns)": [row["consumer_interval_ns"] for row in group_data],
@@ -111,7 +115,20 @@ def format_benchmark_stats(input_file: str) -> None:
             )
             logger.info(fmt_str)
 
-            for metric, values in metrics.items():
+            summary_item = {
+                "parameters": {
+                    "frame_interval_us": frame_interval_us,
+                    "num_frames_per_run": num_frames,
+                    "total_frames": total_frames,
+                },
+                "continuity": {
+                    "non_skipped": non_skipped,
+                    "skipped": skipped,
+                },
+                "metrics": {},
+            }
+
+            for metric, values in metrics_data.items():
                 s = calculate_stats(values)
                 if s:
                     res_str = (
@@ -119,7 +136,19 @@ def format_benchmark_stats(input_file: str) -> None:
                         f"{s['min']:>10.1f} {s['max']:>10.1f} {s['median']:>10.1f} {s['99th']:>10.1f}"
                     )
                     logger.info(res_str)
+                    summary_item["metrics"][metric] = s
+
             logger.info("-" * 80)
+            all_summaries.append(summary_item)
+
+        if output_json:
+            output_path = Path(output_json)
+            if workspace and not output_path.is_absolute():
+                output_path = Path(workspace) / output_json
+
+            with output_path.open("w") as f:
+                json.dump(all_summaries, f, indent=4)
+            logger.info("Benchmark summary saved to: %s", output_path)
 
     except Exception:
         logger.exception("Error processing benchmark data: %s", input_file)
@@ -132,9 +161,10 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Format benchmark statistics from per-frame measurements")
     parser.add_argument("input_file", help="Input CSV file with per-frame measurements")
+    parser.add_argument("--output_json", help="Path to save the summary statistics as a JSON file")
     args = parser.parse_args()
 
-    format_benchmark_stats(args.input_file)
+    format_benchmark_stats(args.input_file, args.output_json)
 
 
 if __name__ == "__main__":
