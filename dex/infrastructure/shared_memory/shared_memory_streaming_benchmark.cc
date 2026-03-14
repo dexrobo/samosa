@@ -4,6 +4,7 @@
 #include <chrono>
 #include <cmath>  // for sqrt
 #include <cstdint>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <random>  // Add this include at the top with other includes
@@ -35,7 +36,14 @@ constexpr size_t kMaxMeasurements = 10000;
 
 // Add near the top with other constants
 constexpr int kNumRepetitions = 100;
-constexpr const char* kCsvFileName = "benchmark_results.csv";
+
+std::string GetCsvPath() {
+  const char* workspace_dir = std::getenv("BUILD_WORKSPACE_DIRECTORY");
+  if (workspace_dir != nullptr) {
+    return std::string(workspace_dir) + "/benchmark_results.csv";
+  }
+  return "benchmark_results.csv";
+}
 
 // Struct to store benchmark metrics in shared memory
 struct MetricsBuffer {
@@ -250,7 +258,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     const auto measurement_frames = std::min(static_cast<size_t>(num_frames), kMaxMeasurements);
 
     if (measurement_frames > warmup_frames + 1) {  // Need at least 2 frames after warmup for intervals
-      std::ofstream csv_file(kCsvFileName, std::ios::app);
+      std::ofstream csv_file(GetCsvPath(), std::ios::app);
       for (size_t i = warmup_frames + 1; i < measurement_frames; ++i) {
         const MeasurementRow row = {
             .frame_interval_us = frame_interval_us,
@@ -311,7 +319,7 @@ BENCHMARK(BenchmarkSharedMemoryLatency)
 int main(int argc, char** argv) {
   // Truncate the file and write headers
   {
-    std::ofstream init_file(kCsvFileName);
+    std::ofstream init_file(GetCsvPath());
     init_file << "frame_interval_us,num_frames,warmup_frames,iteration,repetition,frame_number,"
               << "latency_ns,producer_interval_ns,consumer_interval_ns,frame_id_diff\n";
   }

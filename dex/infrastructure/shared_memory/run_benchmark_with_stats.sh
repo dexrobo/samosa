@@ -16,4 +16,8 @@ FORMATTER_BIN="$2"
 "${FORMATTER_BIN}" "benchmark_results.csv"
 
 # Clean up
-rm benchmark_results.csv
+if [ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]; then
+    rm -f "${BUILD_WORKSPACE_DIRECTORY}/benchmark_results.csv"
+else
+    rm -f benchmark_results.csv
+fi

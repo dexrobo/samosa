@@ -4,6 +4,7 @@
 import csv
 import logging
 import math
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -52,9 +53,18 @@ def format_benchmark_stats(input_file: str) -> None:
         input_file: Path to the CSV file containing per-frame measurements.
 
     """
+    workspace = os.environ.get("BUILD_WORKSPACE_DIRECTORY")
+    file_path = Path(input_file)
+    if workspace and not file_path.is_absolute():
+        file_path = Path(workspace) / input_file
+
     try:
         data: list[dict[str, float]] = []
-        with Path(input_file).open() as f:
+        if not file_path.exists():
+            logger.error("Error processing benchmark data: %s (Not found)", file_path)
+            return
+
+        with file_path.open() as f:
             reader = csv.DictReader(f)
             for raw_row in reader:
                 converted_row: dict[str, float] = {}
