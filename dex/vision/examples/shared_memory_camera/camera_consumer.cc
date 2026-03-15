@@ -21,6 +21,9 @@ int main(int argc, char* argv[]) {
 
     SPDLOG_INFO("Starting camera consumer on '{}'", shm_name);
 
+    auto& control = dex::shared_memory::StreamingControl::Instance();
+    control.ReconfigureAndReset({.handle_signals = true});
+
     auto consumer = dex::shared_memory::Consumer<dex::camera::CameraFrameBuffer>(shm_name);
     if (!consumer.IsValid()) {
       SPDLOG_ERROR("Failed to initialize shared memory consumer");
@@ -28,20 +31,37 @@ int main(int argc, char* argv[]) {
     }
 
     uint64_t last_frame_id = 0;
+    const float timeout_seconds = 1.0f;
+    const timespec timeout = {.tv_sec = static_cast<time_t>(std::floor(timeout_seconds)),
+                              .tv_nsec = static_cast<int64_t>((timeout_seconds - std::floor(timeout_seconds)) * 1e9)};
 
-    (void)consumer.Run([&](const dex::camera::CameraFrameBuffer& buffer) {
-      const auto now = std::chrono::steady_clock::now();
-      const auto now_nanos =
-          static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
+    while (control.IsRunning()) {
+      const auto run_result = consumer.Run(
+          [&](const dex::camera::CameraFrameBuffer& buffer) {
+            const auto now = std::chrono::steady_clock::now();
+            const auto now_nanos = static_cast<uint64_t>(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(now.time_since_epoch()).count());
 
-      const auto latency_ms = static_cast<double>(now_nanos - buffer.timestamp_nanos) / 1e6;  // NOLINT
+            const auto latency_ms = static_cast<double>(now_nanos - buffer.timestamp_nanos) / 1e6;  // NOLINT
 
-      if (buffer.frame_id != last_frame_id) {
-        SPDLOG_INFO("Frame ID: {}, Latency: {:.3f} ms, Camera: {}", buffer.frame_id, latency_ms,
-                    std::string(buffer.camera_name.data()));
-        last_frame_id = buffer.frame_id;
+            if (buffer.frame_id != last_frame_id) {
+              SPDLOG_INFO("Frame ID: {}, Latency: {:.3f} ms, Camera: {}", buffer.frame_id, latency_ms,
+                          std::string(buffer.camera_name.data()));
+              last_frame_id = buffer.frame_id;
+            }
+          },
+          &timeout);
+
+      if (run_result == dex::shared_memory::RunResult::Timeout) {
+        SPDLOG_WARN("Consumer timed out waiting for data, retrying...");
+        control.Reset();
+        continue;
       }
-    });
+
+      if (run_result != dex::shared_memory::RunResult::Success) {
+        break;
+      }
+    }
   } catch (const std::exception& e) {
     SPDLOG_ERROR("Exception occurred: {}", e.what());
     return 1;
@@ -52,4 +72,3 @@ int main(int argc, char* argv[]) {
 
   return 0;
 }
-

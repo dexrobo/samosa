@@ -1,5 +1,6 @@
 #include <chrono>
 #include <iostream>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -56,11 +57,12 @@ int main(int argc, char* argv[]) {
     using ShmBuffer = dex::shared_memory::SharedMemory<dex::camera::CameraFrameBuffer, 2,
                                                        dex::shared_memory::LockFreeSharedMemoryBuffer>;
 
-    // Create the shared memory segment
+    // Create the shared memory segment (or open existing)
+    // NOTE: We do not call Destroy() on exit to allow persistence.
     auto shared_memory =
         ShmBuffer::Create(shm_name, dex::shared_memory::InitializeBuffer<dex::camera::CameraFrameBuffer>);
     if (!shared_memory.IsValid()) {
-      SPDLOG_ERROR("Failed to create shared memory segment '{}'", shm_name);
+      SPDLOG_ERROR("Failed to initialize shared memory segment '{}'", shm_name);
       return 1;
     }
 
@@ -91,8 +93,6 @@ int main(int argc, char* argv[]) {
       }
     });
 
-    (void)dex::shared_memory::SharedMemory<dex::camera::CameraFrameBuffer, 2,
-                                           dex::shared_memory::LockFreeSharedMemoryBuffer>::Destroy(shm_name);
   } catch (const std::exception& e) {
     SPDLOG_ERROR("Exception occurred: {}", e.what());
     return 1;
