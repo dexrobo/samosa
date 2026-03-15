@@ -75,7 +75,11 @@ sh_binary(
     data = [
         "@bazel_tools//tools/bash/runfiles",
         "@markdownlint-cli2//:pkg",
-    ],
+    ] + select({
+        "@platforms//cpu:aarch64": ["@nodejs_linux_arm64//:npm_files"],
+        "@platforms//os:osx": ["@nodejs_darwin_amd64//:npm_files"],
+        "//conditions:default": ["@nodejs_linux_amd64//:npm_files"],
+    }),
 )
 
 sh_binary(
