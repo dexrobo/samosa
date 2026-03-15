@@ -110,3 +110,4 @@ class ScopedFutex {
 
 }  // namespace dex::shared_memory::detail
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_FUTEX_H
+

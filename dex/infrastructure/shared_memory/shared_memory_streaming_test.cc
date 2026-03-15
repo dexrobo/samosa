@@ -18,6 +18,7 @@ using dex::shared_memory::test::ArrayBuffer;
 using dex::shared_memory::test::CoverageSafeExit;
 using dex::shared_memory::test::GetReadIndex;
 using dex::shared_memory::test::GetWriteIndex;
+using dex::shared_memory::test::LargeBuffer;
 using dex::shared_memory::test::LockFreeSharedArrayBuffer;
 using dex::shared_memory::test::MockFutex;
 using dex::shared_memory::test::SetReadIndex;
@@ -533,7 +534,7 @@ struct SignalHandlingTestParam {
 class SharedMemStreamingSignalTest : public SharedMemStreamingTest,
                                      public testing::WithParamInterface<SignalHandlingTestParam> {
  protected:
-  void SetUp() override {  // NOLINT(readability-convert-member-functions-to-static)
+  void SetUp() override {
     // For parameterized tests, we need to include both test name and parameter name
     std::string test_name = std::string(testing::UnitTest::GetInstance()->current_test_info()->test_suite_name()) +
                             "_" + testing::UnitTest::GetInstance()->current_test_info()->name();
@@ -920,4 +921,33 @@ TEST(SharedMemoryStreamingTest, ValidateBufferTest) {
   EXPECT_FALSE(dex::shared_memory::ValidateBuffer(shared_memory.Get()));
 }
 
+TEST_F(SharedMemStreamingTest, LargeBufferCommunication) {
+  RunProducerConsumer<LargeBuffer>(
+      // Producer lambda
+      [](std::string_view shared_memory_name) {
+        dex::shared_memory::Producer<LargeBuffer> producer{shared_memory_name};
+        producer.Run([](LargeBuffer& buffer, uint /*counter*/, int /*buffer_id*/) {
+          buffer.a = 0xDEADBEEF;
+          std::memset(buffer.data.data(), static_cast<int>(0xAA), buffer.data.size());
+        });
+        CoverageSafeExit(0);
+      },
+      // Consumer lambda
+      [](std::string_view shared_memory_name) {
+        const float timeout_seconds = 1.0f;
+        const timespec timeout = {
+            .tv_sec = static_cast<time_t>(std::floor(timeout_seconds)),
+            .tv_nsec = static_cast<int64_t>((timeout_seconds - std::floor(timeout_seconds)) * 1e9)};
+
+        dex::shared_memory::Consumer<LargeBuffer> consumer{shared_memory_name};
+        const auto result = consumer.Run(
+            [](const LargeBuffer& buffer) {
+              if (buffer.a == 0xDEADBEEF && buffer.data[0] == static_cast<std::byte>(0xAA)) CoverageSafeExit(0);
+            },
+            &timeout);
+        CoverageSafeExit(result == dex::shared_memory::RunResult::Timeout ? 1 : 2);
+      });
+}
+
 }  // namespace
+

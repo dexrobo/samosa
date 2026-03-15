@@ -30,9 +30,8 @@ class SharedMemoryMonitorTest : public testing::Test {
   }
 
   void TearDown() override {
-    // Clean up shared memory - handle the nodiscard return value
-    [[maybe_unused]] const bool result =  // NOLINT(cppcoreguidelines-init-variables)
-        SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
+    // Clean up shared memory
+    (void)SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
   }
 
   std::string shared_memory_name_;
@@ -318,8 +317,8 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallbackFastProducerFromInit) {
   std::memcpy(shared_memory.Get()->buffers[0].data(), "A invalid\0", 10);
   std::memcpy(shared_memory.Get()->buffers[1].data(), "B invalid\0", 10);
 
-  std::regex format_regex(R"(buffer: \d+, frame: \d+)");  // NOLINT(bugprone-unused-local-non-trivial-variable)  //
-                                                          // Regex pattern for the expected format
+  const std::regex format_regex(R"(buffer: \d+, frame: \d+)");
+  // Regex pattern for the expected format
 
   const uint max_iterations = 5;
 
@@ -364,9 +363,8 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallbackFastProducerFromInit) {
   const std::string buffer_a_content = std::string(shared_memory.Get()->buffers[0].data());
   const std::string buffer_b_content = std::string(shared_memory.Get()->buffers[1].data());
   EXPECT_TRUE(std::regex_match(buffer_a_content, format_regex))
-      << "Buffer A content does not match the expected format.";  // NOLINT(readability-implicit-bool-conversion)
-  EXPECT_EQ(buffer_b_content, "B invalid")
-      << "Buffer B content does not match the expected format.";  // NOLINT(readability-implicit-bool-conversion)
+      << "Buffer A content does not match the expected format.";
+  EXPECT_EQ(buffer_b_content, "B invalid") << "Buffer B content does not match the expected format.";
   EXPECT_GE(producer_sequence.load(std::memory_order_relaxed), max_iterations);
 }
 
@@ -457,3 +455,4 @@ TEST_F(SharedMemoryMonitorTest, RunCallsCallbackImmediatelyOnFirstFrame) {
 }
 
 }  // namespace dex::shared_memory
+

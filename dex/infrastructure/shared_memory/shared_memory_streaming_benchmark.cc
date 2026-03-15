@@ -13,6 +13,7 @@
 #include <thread>
 
 #include "benchmark/benchmark.h"
+#include "gsl/gsl"
 
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
@@ -24,11 +25,11 @@ constexpr size_t kPixelDataSize = kResolution * 3ul;
 constexpr size_t kNameLength = 64;
 
 struct FrameBuffer {
-  std::array<std::byte, kPixelDataSize> pixel_data;
-  std::array<uint16_t, kResolution> depth_data;
-  std::array<char, kNameLength> camera_name;
-  uint64_t timestamp;
-  uint64_t frame_id;
+  std::array<std::byte, kPixelDataSize> pixel_data{};
+  std::array<uint16_t, kResolution> depth_data{};
+  std::array<char, kNameLength> camera_name{};
+  uint64_t timestamp{};
+  uint64_t frame_id{};
 };
 
 // Maximum number of measurements we'll store
@@ -73,25 +74,29 @@ using LockFreeSharedFrameBuffer =
 using LockFreeSharedMetricsBuffer =
     dex::shared_memory::SharedMemory<MetricsBuffer, 1, dex::shared_memory::LockFreeSharedMemoryBuffer>;
 
+struct ProducerOptions {
+  std::string_view shared_memory_name;
+  std::string_view metrics_shared_memory_name;
+  uint64_t num_frames;
+  uint64_t frame_interval_us;
+};
+
 // Helper function to run producer process
-void RunProducer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
-                 std::string_view metrics_shared_memory_name,
-                 const uint64_t num_frames,  // NOLINT(bugprone-easily-swappable-parameters)
-                 const uint64_t frame_interval_us) {
-  auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
+void RunProducer(const ProducerOptions& options) {
+  auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(options.metrics_shared_memory_name);
   if (!metrics_shared_memory.IsValid()) {
     std::cerr << "Failed to open shared memory for metrics\n";
     _exit(1);
   }
   auto* metrics = metrics_shared_memory.Get()->buffers.data();
-  dex::shared_memory::Producer<FrameBuffer> producer{shared_memory_name};
+  dex::shared_memory::Producer<FrameBuffer> producer{options.shared_memory_name};
 
   producer.Run([&](FrameBuffer& buffer, const uint counter) {
-    if (metrics->processed_frames.load(std::memory_order_acquire) >= static_cast<size_t>(num_frames)) {
+    if (metrics->processed_frames.load(std::memory_order_acquire) >= static_cast<size_t>(options.num_frames)) {
       _exit(0);
     }
     // Small sleep to simulate work
-    std::this_thread::sleep_for(std::chrono::microseconds(frame_interval_us));
+    std::this_thread::sleep_for(std::chrono::microseconds(options.frame_interval_us));
 
     // Get current timestamp
     const auto now = std::chrono::steady_clock::now();
@@ -108,17 +113,22 @@ void RunProducer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily
   });
 }
 
+struct ConsumerOptions {
+  std::string_view shared_memory_name;
+  std::string_view metrics_shared_memory_name;
+  uint64_t num_frames;
+};
+
 // Helper function to run consumer process
-void RunConsumer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
-                 std::string_view metrics_shared_memory_name, const uint64_t num_frames) {
-  auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
+void RunConsumer(const ConsumerOptions& options) {
+  auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(options.metrics_shared_memory_name);
   if (!metrics_shared_memory.IsValid()) {
     std::cerr << "Failed to open shared memory for metrics\n";
     _exit(1);
   }
 
   auto* metrics = metrics_shared_memory.Get()->buffers.data();
-  dex::shared_memory::Consumer<FrameBuffer> consumer{shared_memory_name};
+  dex::shared_memory::Consumer<FrameBuffer> consumer{options.shared_memory_name};
   uint64_t last_frame_id = 0;
   bool first_frame = true;
   size_t frame_count = 0;
@@ -148,25 +158,29 @@ void RunConsumer(std::string_view shared_memory_name,  // NOLINT(bugprone-easily
     const size_t current_count = metrics->processed_frames.fetch_add(1, std::memory_order_release);
 
     // Check if we've reached num_frames (note: we check current_count since fetch_add returns the old value)
-    if (current_count + 1 >= static_cast<size_t>(num_frames)) {
+    if (current_count + 1 >= static_cast<size_t>(options.num_frames)) {
       _exit(0);
     }
   });
 }
 
+struct SharedMemoryNames {
+  std::string_view data_shm_name;
+  std::string_view metrics_shm_name;
+};
+
 // Helper function to cleanup shared memory segments
-void CleanupSharedMemory(std::string_view shared_memory_name,  // NOLINT(bugprone-easily-swappable-parameters)
-                         std::string_view metrics_shared_memory_name) {
-  [[maybe_unused]] const bool result = LockFreeSharedFrameBuffer::Destroy(shared_memory_name);
-  [[maybe_unused]] const bool metrics_result = LockFreeSharedMetricsBuffer::Destroy(metrics_shared_memory_name);
+void CleanupSharedMemory(const SharedMemoryNames& names) {
+  [[maybe_unused]] const bool result = LockFreeSharedFrameBuffer::Destroy(names.data_shm_name);
+  [[maybe_unused]] const bool metrics_result = LockFreeSharedMetricsBuffer::Destroy(names.metrics_shm_name);
 }
 
 // Helper function to create and initialize shared memory segments
-bool CreateSharedMemory(std::string_view shared_memory_name, std::string_view metrics_shared_memory_name) {
+bool CreateSharedMemory(const SharedMemoryNames& names) {
   // Create shared memory for data
   {
     auto shared_memory =
-        LockFreeSharedFrameBuffer::Create(shared_memory_name, dex::shared_memory::InitializeBuffer<FrameBuffer>);
+        LockFreeSharedFrameBuffer::Create(names.data_shm_name, dex::shared_memory::InitializeBuffer<FrameBuffer>);
     if (!shared_memory.IsValid()) {
       return false;
     }
@@ -174,9 +188,9 @@ bool CreateSharedMemory(std::string_view shared_memory_name, std::string_view me
 
   // Create shared memory for metrics
   {
-    auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Create(metrics_shared_memory_name);
+    auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Create(names.metrics_shm_name);
     if (!metrics_shared_memory.IsValid()) {
-      CleanupSharedMemory(shared_memory_name, metrics_shared_memory_name);
+      CleanupSharedMemory(names);
       return false;
     }
   }
@@ -189,8 +203,8 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
   // Static counter for repetitions that persists between benchmark calls
   static uint64_t repetition_count = 0;
 
-  const uint64_t frame_interval_us = state.range(0);
-  const uint64_t num_frames = state.range(1);
+  const auto frame_interval_us = static_cast<uint64_t>(state.range(0));
+  const auto num_frames = static_cast<uint64_t>(state.range(1));
   const auto warmup_frames = static_cast<size_t>(state.range(2));
 
   // Create a random generator for unique shared memory names for each iteration
@@ -209,8 +223,11 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     const std::string metrics_shared_memory_name =
         "benchmark_metrics_shared_memory_" + std::to_string(id_distribution(random_engine));
 
+    const SharedMemoryNames shm_names{.data_shm_name = shared_memory_name,
+                                      .metrics_shm_name = metrics_shared_memory_name};
+
     // Create and initialize shared memory segments with the random names
-    if (!CreateSharedMemory(shared_memory_name, metrics_shared_memory_name)) {
+    if (!CreateSharedMemory(shm_names)) {
       state.SkipWithError("Failed to create shared memory segments");
       break;
     }
@@ -218,12 +235,14 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     // Fork consumer process
     const pid_t consumer_pid = fork();
     if (consumer_pid == -1) {
-      CleanupSharedMemory(shared_memory_name, metrics_shared_memory_name);
+      CleanupSharedMemory(shm_names);
       state.SkipWithError("Failed to fork consumer process");
       break;
     }
     if (consumer_pid == 0) {  // Consumer child process
-      RunConsumer(shared_memory_name, metrics_shared_memory_name, num_frames);
+      RunConsumer({.shared_memory_name = shared_memory_name,
+                   .metrics_shared_memory_name = metrics_shared_memory_name,
+                   .num_frames = num_frames});
       _exit(0);
     }
 
@@ -231,12 +250,15 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     const pid_t producer_pid = fork();
     if (producer_pid == -1) {
       kill(consumer_pid, SIGTERM);
-      CleanupSharedMemory(shared_memory_name, metrics_shared_memory_name);
+      CleanupSharedMemory(shm_names);
       state.SkipWithError("Failed to fork producer process");
       break;
     }
     if (producer_pid == 0) {  // Producer child process
-      RunProducer(shared_memory_name, metrics_shared_memory_name, num_frames, frame_interval_us);
+      RunProducer({.shared_memory_name = shared_memory_name,
+                   .metrics_shared_memory_name = metrics_shared_memory_name,
+                   .num_frames = num_frames,
+                   .frame_interval_us = frame_interval_us});
       _exit(0);
     }
 
@@ -249,7 +271,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     // Open metrics shared memory to read results
     auto metrics_shared_memory = LockFreeSharedMetricsBuffer::Open(metrics_shared_memory_name);
     if (!metrics_shared_memory.IsValid()) {
-      CleanupSharedMemory(shared_memory_name, metrics_shared_memory_name);
+      CleanupSharedMemory(shm_names);
       state.SkipWithError("Failed to open metrics shared memory for reading");
       break;
     }
@@ -285,7 +307,7 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     iteration_count++;
 
     // Clean up shared memory segments before next iteration
-    CleanupSharedMemory(shared_memory_name, metrics_shared_memory_name);
+    CleanupSharedMemory(shm_names);
   }
 
   // Increment repetition count after all iterations are done
@@ -317,19 +339,28 @@ BENCHMARK(BenchmarkSharedMemoryLatency)
 
 // Modify the main function
 int main(int argc, char** argv) {
-  // Truncate the file and write headers
-  {
-    std::ofstream init_file(GetCsvPath());
-    init_file << "frame_interval_us,num_frames,warmup_frames,iteration,repetition,frame_number,"
-              << "latency_ns,producer_interval_ns,consumer_interval_ns,frame_id_diff\n";
+  try {
+    // Truncate the file and write headers
+    {
+      std::ofstream init_file(GetCsvPath());
+      init_file << "frame_interval_us,num_frames,warmup_frames,iteration,repetition,frame_number,"
+                << "latency_ns,producer_interval_ns,consumer_interval_ns,frame_id_diff\n";
+    }
+
+    benchmark::Initialize(&argc, argv);
+
+    benchmark::RunSpecifiedBenchmarks();
+    benchmark::Shutdown();
+  } catch (const std::exception& e) {
+    std::cerr << "Unhandled exception: " << e.what() << "\n";
+    return 1;
+  } catch (...) {
+    std::cerr << "Unknown exception occurred\n";
+    return 1;
   }
-
-  benchmark::Initialize(&argc, argv);
-
-  benchmark::RunSpecifiedBenchmarks();
-  benchmark::Shutdown();
 
   return 0;
 }
 
 // BENCHMARK_MAIN();
+

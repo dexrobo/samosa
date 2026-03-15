@@ -31,9 +31,8 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double ti
   // Handle producer writing state
   if (shared_memory_buffer_.IsValid()) {
     // Get packed sequence and writing flag
-    uint32_t packed = shared_memory_buffer_.Get()->sequence_and_writing.load(
-        std::memory_order_acquire);  // NOLINT(misc-const-correctness)
-    const bool is_writing = detail::IsWriting(packed);
+    const uint32_t initial_packed = shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
+    const bool is_writing = detail::IsWriting(initial_packed);
 
     if (is_writing) {
       switch (read_mode) {
@@ -48,8 +47,8 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double ti
           const timespec timeout = detail::SecondsToTimespec(timeout_sec);
 
           // Wait for the packed value to change (either sequence or writing flag)
-          const auto wait_result =
-              detail::GetDefaultFutex()->Wait(shared_memory_buffer_.Get()->sequence_and_writing, packed, &timeout);
+          const auto wait_result = detail::GetDefaultFutex()->Wait(shared_memory_buffer_.Get()->sequence_and_writing,
+                                                                   initial_packed, &timeout);
           if (wait_result != detail::WaitResult::Success) {
             SPDLOG_DEBUG("Monitor: Wait returned {} while waiting for producer to finish writing",
                          static_cast<int>(wait_result));
@@ -57,8 +56,9 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double ti
           }
 
           // Check if still writing after wait.
-          packed = shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
-          if (detail::IsWriting(packed)) {
+          const uint32_t post_wait_packed =
+              shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
+          if (detail::IsWriting(post_wait_packed)) {
             SPDLOG_DEBUG("Monitor: Producer is still writing. Will try again next time.");
             return std::nullopt;
           }

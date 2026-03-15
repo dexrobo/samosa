@@ -55,6 +55,12 @@ case "$PART" in
     format)
         log "Running all formatters..."
         bazel run //tools/format "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            if ! git diff --exit-code >/dev/null 2>&1; then
+                error "Formatting changes detected. Please commit the changes."
+                exit 1
+            fi
+        fi
         ;;
     lint)
         log "Running linters (Ruff, Clang-Tidy)..."

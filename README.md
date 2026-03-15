@@ -122,3 +122,4 @@ Before submitting a Pull Request, you **must** run the comprehensive verificatio
 
 ## License
 Samosa is released under the MIT License. See [LICENSE](LICENSE) for details.
+

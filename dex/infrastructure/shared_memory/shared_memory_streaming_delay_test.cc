@@ -59,7 +59,7 @@ struct DelayTestParam {
 
 class SharedMemStreamingDelayTest : public SharedMemStreamingTest, public testing::WithParamInterface<DelayTestParam> {
  protected:
-  void SetUp() override {  // NOLINT(readability-convert-member-functions-to-static)
+  void SetUp() override {
     // For parameterized tests, we need to include both test name and parameter name
     std::string test_name = std::string(testing::UnitTest::GetInstance()->current_test_info()->test_suite_name()) +
                             "_" + testing::UnitTest::GetInstance()->current_test_info()->name();
@@ -266,3 +266,4 @@ INSTANTIATE_TEST_SUITE_P(VariableDelays, SharedMemStreamingDelayTest, testing::V
                          [](const testing::TestParamInfo<DelayTestParam>& info) { return info.param.ToString(); });
 
 }  // namespace
+

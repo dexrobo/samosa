@@ -77,7 +77,7 @@ class SharedMemory {
    */
   [[nodiscard]] static SharedMemory Create(const std::string_view name,
                                            detail::BufferCallback<BufferType> init = &NullCallback<BufferType>) {
-    return SharedMemory(name, true, init, nullptr);
+    return SharedMemory(ConstructorParams{.name = name, .create = true, .init = init});
   }
 
   /**
@@ -88,7 +88,7 @@ class SharedMemory {
    */
   [[nodiscard]] static SharedMemory Open(const std::string_view name,
                                          detail::BufferCallback<BufferType> validate = &NullCallback<BufferType>) {
-    return SharedMemory(name, false, nullptr, validate);
+    return SharedMemory(ConstructorParams{.name = name, .create = false, .validate = validate});
   }
 
   ~SharedMemory() { Cleanup(); }
@@ -121,17 +121,18 @@ class SharedMemory {
   SharedMemory& operator=(SharedMemory&&) = delete;
 
  private:
+  struct ConstructorParams {
+    std::string_view name;
+    bool create{};
+    detail::BufferCallback<BufferType> init = nullptr;
+    detail::BufferCallback<BufferType> validate = nullptr;
+  };
+
   /**
    * @brief Constructs a new SharedMemory object.
-   * @param name Name of the shared memory segment.
-   * @param create If true, attempts to create a new shared memory segment; otherwise, opens an existing one.
-   * @param init_callback Callback function to initialize the buffer (only used when create is true)
-   * @param validate_callback Callback function to validate the buffer (only used when create is false)
+   * @param params Parameters for construction.
    */
-  explicit SharedMemory(
-      std::string_view name, bool create,
-      detail::BufferCallback<BufferType> init = nullptr,  // NOLINT(bugprone-easily-swappable-parameters)
-      detail::BufferCallback<BufferType> validate = nullptr);
+  explicit SharedMemory(const ConstructorParams& params);
 
   struct State {
     std::string name;

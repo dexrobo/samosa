@@ -2,43 +2,15 @@
 #
 # Explanation for why some of the checks are disabled:
 #
-# -bugprone-easily-swappable-parameters: hard to design around this in certain scenarios like comparator functions and
-#    overriding third-party interfaces
-# -bugprone-exception-escape: Temporarily added due to various clang-tidy issues such as:
-#    https://github.com/llvm/llvm-project/issues/152026
-# -bugprone-lambda-function-name: SPDLOG macros that capture __FUNCTION__ are used inside lambdas
-# -bugprone-unchecked-optional-access: Temporarily added due to clang-tidy issue:
-#    https://github.com/llvm/llvm-project/issues/55530
-# -bugprone-return-const-ref-from-parameter: Not needed as we enable GCC's Wdangling-reference check.
-# -cppcoreguidelines-avoid-do-while: Do while loops are the correct solution for some problems and are not difficult to
-#    understand and follow (as opposed to say goto-based control flow)
-# -cppcoreguidelines-pro-bounds-constant-array-index: Part of an optional strict bounds-safety profile which is overly
-#    restrictive for our codebase
-# -cppcoreguidelines-pro-bounds-array-to-pointer-decay: Part of an optional strict bounds-safety profile which is overly
-#    restrictive for our codebase
-# -cppcoreguidelines-pro-bounds-pointer-arithmetic: Part of an optional strict bounds-safety profile which is overly
-#    restrictive for our codebase
-# -cppcoreguidelines-pro-type-vararg: Flags uses of common C standard library functions such as printf
-# -google-runtime-int: Too verbose to use in all contexts. Prefer to leave this up to the developer.
+# -google-default-arguments: Too verbose to use in all contexts. Prefer to leave this up to the developer.
 # -misc-header-include-cycle: Header include cycles are useful in header-only libraries with split declaration and
 #    definition headers, where the declaration header includes the definition header at the bottom but the definition
 #    header also includes the declaration header at the top the same way a source file would for developer convenience.
 # -misc-include-cleaner: Does not seem to work very well, often requiring inclusion of private headers if that is where 
 #    public APIs are actually declared, which is the case even for some standard library headers.
-# -misc-no-recursion: Recursion is a reasonable solution in some cases
-# -modernize-pass-by-value: This practice is suboptimal for both move and copy caes. Perfect forwarding, possibly with
-#    a concept documenting and enforcing a type is a better solution.
-# -modernize-return-braced-init-list: This seems to hurt readability in some cases. Prefer to leave this up to the
-#    developer.
 # -modernize-use-trailing-return-type: This is purely stylistic and controversial. Prefer to leave this up to the
 #    developer.
-# -readability-else-after-return: It is not clear that this improves readability in all cases. Prefer to leave this up
-#    to the developer.
-# -readability-function-cognitive-complexity: Utility of this check is unclear in some cases
-# -readability-suspicious-call-argument: Flags many cases incorrectly. Perhaps could be made useful if we add a custom
-#    selection / tuning of its string distance function.
-# -readability-use-anyofallof: It is not clear that this improves readability compared to a range-based for loop, even
-#    for simple cases
+# -performance-enum-size: Not a priority for our codebase.
 
 # Top-level config file.
 InheritParentConfig: False
@@ -157,3 +129,4 @@ CheckOptions:
     value: false
   - key: readability-uppercase-literal-suffix.NewSuffixes
     value: L;LL;LU;LLU
+

@@ -13,6 +13,18 @@ namespace dex::shared_memory::test {
 
 constexpr size_t kFrameSize = 64;
 using ArrayBuffer = std::array<char, kFrameSize>;
+
+constexpr size_t kLargeFrameSize = 16 * 1024 * 1024;
+
+struct LargeStruct {
+  uint32_t a;
+  uint32_t b;
+  std::array<std::byte, kLargeFrameSize> data;
+  uint64_t c;
+};
+
+using LargeBuffer = LargeStruct;
+
 using LockFreeSharedArrayBuffer =
     shared_memory::SharedMemory<ArrayBuffer, 2, shared_memory::LockFreeSharedMemoryBuffer>;
 using LockFreeSharedUnsignedIntBuffer = shared_memory::SharedMemory<uint, 2, shared_memory::LockFreeSharedMemoryBuffer>;
@@ -139,10 +151,8 @@ class SharedMemStreamingTest : public testing::Test {
                            const std::function<void(std::string_view)>& consumer_func) {
     {
       // Create shared memory
-      auto shared_memory =  // NOLINT(readability-isolate-declaration)
-          SharedMemory<Buffer, buffer_size,
-                       shared_memory::LockFreeSharedMemoryBuffer>::Create(  // NOLINT(readability-identifier-naming)
-              shared_memory_name_, InitializeBuffer<Buffer>);
+      auto shared_memory = SharedMemory<Buffer, buffer_size, shared_memory::LockFreeSharedMemoryBuffer>::Create(
+          shared_memory_name_, InitializeBuffer<Buffer>);
       ASSERT_TRUE(shared_memory.IsValid());
     }
 
@@ -203,8 +213,7 @@ class SharedMemStreamingTest : public testing::Test {
   }
 
   void TearDown() override {
-    [[maybe_unused]] const bool result =  // NOLINT(cppcoreguidelines-init-variables)
-        SharedMemory<ArrayBuffer, 2, shared_memory::LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
+    (void)SharedMemory<ArrayBuffer, 2, shared_memory::LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
   }
 
   std::string shared_memory_name_;
@@ -212,3 +221,4 @@ class SharedMemStreamingTest : public testing::Test {
 
 }  // namespace dex::shared_memory::test
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
+

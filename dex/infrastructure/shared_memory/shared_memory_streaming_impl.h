@@ -54,7 +54,14 @@ bool InitializeBuffer(StreamingSharedMemoryBuffer<Buffer, buffer_size>* buffer) 
   if constexpr (requires { buffer->sequence_and_writing; }) {
     buffer->sequence_and_writing.store(0, std::memory_order_relaxed);  // Sequence 0, not writing
   }
-  std::memset(buffer->buffers.data(), 0, sizeof(buffer->buffers));
+
+  if constexpr (std::is_trivially_copyable_v<Buffer>) {
+    std::memset(static_cast<void*>(buffer->buffers.data()), 0, sizeof(buffer->buffers));
+  } else {
+    for (auto& shm_buffer : buffer->buffers) {
+      shm_buffer = Buffer{};
+    }
+  }
   return true;
 }
 
@@ -146,6 +153,11 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
 // Consumer implementation
 // Provides blocking consumption of the latest available snapshot.
 ////////////////////////////////////////////////////////////////////////////////
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
+
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, StreamingSharedMemoryBuffer>
 RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::HandleWaitResult(
@@ -237,6 +249,10 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeFra
   }
   return RunResult::Stopped;
 }
+
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 
 }  // namespace dex::shared_memory
 

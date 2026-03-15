@@ -122,3 +122,4 @@ class StreamingControl {
 
 }  // namespace dex::shared_memory
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
+

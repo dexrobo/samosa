@@ -116,9 +116,6 @@ cc_test(
     name = "shared_memory_streaming_test",
     size = "small",
     srcs = ["shared_memory_streaming_test.cc"],
-    copts = [
-        "-Wno-stringop-overflow",
-    ],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
     target_compatible_with = select({
@@ -143,9 +140,6 @@ cc_test(
     name = "shared_memory_streaming_delay_test",
     size = "small",
     srcs = ["shared_memory_streaming_delay_test.cc"],
-    copts = [
-        "-Wno-stringop-overflow",
-    ],
     env = select({
         "//:ci_config": {
             "GCOV_CHILD_FORK": "1",  # Preserve existing env var
@@ -178,9 +172,6 @@ cc_test(
 cc_binary(
     name = "shared_memory_streaming_benchmark",
     srcs = ["shared_memory_streaming_benchmark.cc"],
-    copts = [
-        "-Wno-stringop-overflow",
-    ],
     deps = [
         ":shared_memory_streaming",
         SPDLOG,
