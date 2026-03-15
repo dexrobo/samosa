@@ -97,7 +97,7 @@ Samosa includes a specialized benchmarking tool to measure end-to-end latency an
 bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_benchmark
 
 # Post-process results to generate statistics
-./dex/infrastructure/shared_memory/run_benchmark_with_stats.sh
+bazel run //dex/infrastructure/shared_memory:run_benchmark_with_stats
 ```
 
 ## Contributing
@@ -122,4 +122,5 @@ Before submitting a Pull Request, you **must** run the comprehensive verificatio
 
 ## License
 Samosa is released under the MIT License. See [LICENSE](LICENSE) for details.
+
 
