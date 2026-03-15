@@ -56,8 +56,11 @@ case "$PART" in
         log "Running all formatters..."
         bazel run //tools/format "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-            if ! git diff --exit-code >/dev/null 2>&1; then
-                error "Formatting changes detected. Please commit the changes."
+            DIFF_FILES=$(git diff --name-only)
+            if [[ -n "$DIFF_FILES" ]]; then
+                error "Formatting changes detected in the following files:"
+                echo "$DIFF_FILES"
+                error "Please commit the changes."
                 exit 1
             fi
         fi
