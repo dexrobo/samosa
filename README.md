@@ -4,17 +4,17 @@ Samosa is a high-performance C++20 library designed for ultra-low latency data s
 
 ## Key Features
 
-- **Non-Blocking Publisher**: Producers never block on consumers. High-frequency updates are published to shared memory with minimal overhead.
-- **Latest-Only Consumption**: Consumers always fetch the most recent snapshot. If multiple updates occurred since the last read, intermediate ones are skipped to prevent "lag" buildup.
-- **Independent Lifecycle Resilience**: Producers and consumers can restart at any time. They automatically reconnect to the shared memory segment and resume data transfer reliably.
-- **Lock-Free Internals**: Uses atomic operations and Linux futexes for synchronization, avoiding heavy kernel locks.
-- **Double-Buffered**: Implements internal double-buffering to ensure the consumer never reads a partially written frame.
+* **Non-Blocking Publisher**: Producers never block on consumers. High-frequency updates are published to shared memory with minimal overhead.
+* **Latest-Only Consumption**: Consumers always fetch the most recent snapshot. If multiple updates occurred since the last read, intermediate ones are skipped to prevent "lag" buildup.
+* **Independent Lifecycle Resilience**: Producers and consumers can restart at any time. They automatically reconnect to the shared memory segment and resume data transfer reliably.
+* **Lock-Free Internals**: Uses atomic operations and Linux futexes for synchronization, avoiding heavy kernel locks.
+* **Double-Buffered**: Implements internal double-buffering to ensure the consumer never reads a partially written frame.
 
 ## Requirements
 
-- **Operating System**: Linux (Kernel 2.6.22+ required for `futex` support).
-- **Compiler**: GCC 12+ or Clang 14+ (C++20 support required).
-- **Build System**: [Bazel](https://bazel.build/).
+* **Operating System**: Linux (Kernel 2.6.22+ required for `futex` support).
+* **Compiler**: GCC 12+ or Clang 14+ (C++20 support required).
+* **Build System**: [Bazel](https://bazel.build/).
 
 ## Usage
 
@@ -97,7 +97,7 @@ Samosa includes a specialized benchmarking tool to measure end-to-end latency an
 bazel run //dex/infrastructure/shared_memory:shared_memory_streaming_benchmark
 
 # Post-process results to generate statistics
-./dex/infrastructure/shared_memory/run_benchmark_with_stats.sh
+bazel run //dex/infrastructure/shared_memory:run_benchmark_with_stats
 ```
 
 ## Contributing

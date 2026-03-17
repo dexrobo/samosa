@@ -81,17 +81,14 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
 ////////////////////////////////////////////////////////////////////////////////
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::SharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
-SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(
-    std::string_view name, bool create,
-    detail::BufferCallback<BufferType> init,  // NOLINT(bugprone-easily-swappable-parameters)
-    detail::BufferCallback<BufferType> validate)
-    : state_{.name = std::string(name)} {
-  if (!OpenFile(create)) {
+SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(const ConstructorParams& params)
+    : state_{.name = std::string(params.name)} {
+  if (!OpenFile(params.create)) {
     Cleanup();
     return;
   }
 
-  if (!create) {
+  if (!params.create) {
     struct stat file_stat = {};
     if (fstat(*state_.file_descriptor, &file_stat) != 0) {
       SPDLOG_ERROR("fstat error: {}", detail::FormatSystemError("fstat error", errno));
@@ -109,7 +106,7 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(
     }
   }
 
-  if (create && !InitializeSize()) {
+  if (params.create && !InitializeSize()) {
     Cleanup();
     shm_unlink(state_.name.c_str());
     return;
@@ -117,7 +114,7 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(
 
   if (!MapMemory()) {
     Cleanup();
-    if (create) {
+    if (params.create) {
       shm_unlink(state_.name.c_str());
     }
     return;
@@ -126,14 +123,14 @@ SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::SharedMemory(
   // Close fd after successful mmap
   state_.file_descriptor.reset();
 
-  if (create) {
-    if (!InitializeBuffer(init)) {
+  if (params.create) {
+    if (!InitializeBuffer(params.init)) {
       Cleanup();
       shm_unlink(state_.name.c_str());
       return;
     }
   } else {
-    if (!ValidateBuffer(validate)) {
+    if (!ValidateBuffer(params.validate)) {
       Cleanup();
       return;
     }

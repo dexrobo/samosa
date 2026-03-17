@@ -55,6 +55,16 @@ case "$PART" in
     format)
         log "Running all formatters..."
         bazel run //tools/format "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
+        if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            # Exclude lockfile from formatting check as it may be updated by Bazel resolution
+            DIFF_FILES=$(git diff --name-only -- . ':!MODULE.bazel.lock')
+            if [[ -n "$DIFF_FILES" ]]; then
+                error "Formatting changes detected in the following files:"
+                echo "$DIFF_FILES"
+                error "Please commit the changes."
+                exit 1
+            fi
+        fi
         ;;
     lint)
         log "Running linters (Ruff, Clang-Tidy)..."

@@ -6,3 +6,5 @@ line-length: false
 ol-prefix: false
 ul-style:
   style: asterisk
+MD012: true
+MD047: true

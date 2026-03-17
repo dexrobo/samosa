@@ -6,7 +6,7 @@ package(default_visibility = ["//visibility:public"])
 genrule(
     name = "ruff_bin",
     srcs = select({
-        "@platforms//cpu:aarch64": ["@ruff_arm64//file"],
+        ":linux_arm64": ["@ruff_arm64//file"],
         "//conditions:default": ["@ruff_amd64//file"],
     }),
     outs = ["ruff_executable"],
@@ -27,7 +27,7 @@ alias(
 genrule(
     name = "yamlfmt_bin",
     srcs = select({
-        "@platforms//cpu:aarch64": ["@yamlfmt_arm64//file"],
+        ":linux_arm64": ["@yamlfmt_arm64//file"],
         "//conditions:default": ["@yamlfmt_amd64//file"],
     }),
     outs = ["yamlfmt_executable"],
@@ -43,7 +43,7 @@ alias(
 genrule(
     name = "shfmt_bin",
     srcs = select({
-        "@platforms//cpu:aarch64": ["@shfmt_arm64//file"],
+        ":linux_arm64": ["@shfmt_arm64//file"],
         "//conditions:default": ["@shfmt_amd64//file"],
     }),
     outs = ["shfmt_executable"],
@@ -68,6 +68,22 @@ genrule(
     executable = True,
 )
 
+config_setting(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+config_setting(
+    name = "linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
 # Markdownlint selection
 sh_binary(
     name = "markdownlint",
@@ -75,7 +91,10 @@ sh_binary(
     data = [
         "@bazel_tools//tools/bash/runfiles",
         "@markdownlint-cli2//:pkg",
-    ],
+    ] + select({
+        ":linux_arm64": ["@nodejs_linux_arm64//:npm_files"],
+        "//conditions:default": ["@nodejs_linux_amd64//:npm_files"],
+    }),
 )
 
 sh_binary(

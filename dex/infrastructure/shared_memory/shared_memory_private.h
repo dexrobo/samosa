@@ -15,3 +15,4 @@ namespace dex::shared_memory::detail {
 
 }  // namespace dex::shared_memory::detail
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_PRIVATE_H
+
