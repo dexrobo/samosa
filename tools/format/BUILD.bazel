@@ -59,10 +59,7 @@ alias(
 # Taplo selection
 genrule(
     name = "taplo_bin",
-    srcs = select({
-        "@platforms//os:osx": ["@taplo_mac//file"],
-        "//conditions:default": ["@taplo//file"],
-    }),
+    srcs = ["@taplo//file"],
     outs = ["taplo_executable"],
     cmd = "gunzip -c $< > $@",
     executable = True,
