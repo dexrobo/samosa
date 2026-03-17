@@ -1,4 +1,6 @@
+load("@nanobind_bazel//:build_defs.bzl", "nanobind_extension")
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 
 cc_binary(
     name = "camera_driver",
@@ -17,5 +19,43 @@ cc_binary(
         "//dex/drivers/camera/base:types",
         "//dex/infrastructure/shared_memory:shared_memory_streaming",
         "@com_github_gabime_spdlog//:spdlog",
+    ],
+)
+
+nanobind_extension(
+    name = "shared_memory_camera_bindings",
+    srcs = ["bindings.cc"],
+    deps = [
+        "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_streaming",
+    ],
+)
+
+py_binary(
+    name = "video_reader",
+    srcs = ["video_reader.py"],
+    deps = [
+        ":shared_memory_camera_bindings",
+        "@python_deps//numpy",
+        "@python_deps//opencv_python",
+    ],
+)
+
+py_binary(
+    name = "rerun_monitor",
+    srcs = ["rerun_monitor.py"],
+    deps = [
+        ":shared_memory_camera_bindings",
+        "@python_deps//numpy",
+        "@python_deps//rerun_sdk",
+    ],
+)
+
+py_test(
+    name = "bindings_test",
+    srcs = ["bindings_test.py"],
+    deps = [
+        ":shared_memory_camera_bindings",
+        "@python_deps//numpy",
     ],
 )

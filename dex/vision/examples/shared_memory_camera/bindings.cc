@@ -1,0 +1,98 @@
+#include <nanobind/nanobind.h>
+#include <nanobind/ndarray.h>
+#include <nanobind/stl/optional.h>
+#include <nanobind/stl/string.h>
+#include <nanobind/stl/vector.h>
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <memory>
+#include <optional>
+#include <string>
+
+#include "dex/drivers/camera/base/types.h"
+#include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
+
+namespace nb = nanobind;
+
+NB_MODULE(shared_memory_camera_bindings, module_handle) {
+  nb::class_<dex::shared_memory::StreamingControl>(module_handle, "StreamingControl")
+      .def_static("instance", &dex::shared_memory::StreamingControl::Instance, nb::rv_policy::reference)
+      .def("is_running", &dex::shared_memory::StreamingControl::IsRunning)
+      .def("stop", &dex::shared_memory::StreamingControl::Stop)
+      .def("reset", &dex::shared_memory::StreamingControl::Reset)
+      .def("reconfigure_and_reset",
+           [](dex::shared_memory::StreamingControl& control, bool handle_signals) {
+             control.ReconfigureAndReset({.handle_signals = handle_signals});
+           });
+
+  nb::class_<dex::camera::CameraFrameBuffer>(module_handle, "CameraFrameBuffer")
+      .def(nb::init<>())
+      .def_rw("color_width", &dex::camera::CameraFrameBuffer::color_width)
+      .def_rw("color_height", &dex::camera::CameraFrameBuffer::color_height)
+      .def_rw("color_image_size", &dex::camera::CameraFrameBuffer::color_image_size)
+      .def_rw("frame_id", &dex::camera::CameraFrameBuffer::frame_id)
+      .def_rw("timestamp_nanos", &dex::camera::CameraFrameBuffer::timestamp_nanos)
+      .def_prop_rw(
+          "camera_name", [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.camera_name.data()); },
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& name) {
+            dex::camera::StringToArray(name, buffer.camera_name);
+          })
+      .def_prop_rw(
+          "color_image_bytes",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.color_image_bytes.size()};
+            return nb::ndarray<nb::numpy, uint8_t>(
+                reinterpret_cast<uint8_t*>(buffer.color_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
+            std::memcpy(buffer.color_image_bytes.data(), data.data(),
+                        std::min(buffer.color_image_bytes.size(), data.size()));
+          });
+
+  using CameraBuffer = dex::camera::CameraFrameBuffer;
+  using ShmBuffer = dex::shared_memory::SharedMemory<CameraBuffer, 2, dex::shared_memory::LockFreeSharedMemoryBuffer>;
+
+  module_handle.def("initialize_shared_memory", [](const std::string& name) {
+    auto shm = ShmBuffer::Create(name, dex::shared_memory::InitializeBuffer<CameraBuffer>);
+    return shm.IsValid();
+  });
+
+  nb::class_<dex::shared_memory::Producer<CameraBuffer>>(module_handle, "Producer")
+      .def(nb::init<const std::string&>())
+      .def("is_valid", &dex::shared_memory::Producer<CameraBuffer>::IsValid)
+      .def("write", [](dex::shared_memory::Producer<CameraBuffer>& producer, const CameraBuffer& src) {
+        // Use ProduceFrame instead of Run to avoid the infinite loop
+        producer.ProduceFrame(src.frame_id, [&](CameraBuffer& dst, uint32_t) { std::memcpy(&dst, &src, sizeof(CameraBuffer)); });
+      });
+
+  nb::class_<dex::shared_memory::Consumer<CameraBuffer>>(module_handle, "Consumer")
+      .def(nb::init<const std::string&>())
+      .def("is_valid", &dex::shared_memory::Consumer<CameraBuffer>::IsValid)
+      .def(
+          "read",
+          [](dex::shared_memory::Consumer<CameraBuffer>& consumer, int frame_id) -> CameraBuffer* {
+            // CameraBuffer is ~20MB, must heap allocate to avoid stack overflow.
+            // Using take_ownership policy so nanobind manages the lifecycle.
+            auto result = std::make_unique<CameraBuffer>();
+            bool found = false;
+            constexpr int64_t kTimeoutNanos = 10000000;  // 10ms
+            const timespec timeout = {.tv_sec = 0, .tv_nsec = kTimeoutNanos};
+            auto res = consumer.ConsumeFrame(
+                frame_id,
+                [&](const CameraBuffer& src) {
+                  std::memcpy(result.get(), &src, sizeof(CameraBuffer));
+                  found = true;
+                },
+                &timeout);
+            if (res == dex::shared_memory::RunResult::Success && found) {
+              return result.release();
+            }
+            return nullptr;
+          },
+          nb::rv_policy::take_ownership, nb::arg("frame_id") = 0);
+}
+
