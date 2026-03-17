@@ -35,8 +35,10 @@ int main(int argc, char* argv[]) {
     const timespec timeout = {.tv_sec = static_cast<time_t>(std::floor(timeout_seconds)),
                               .tv_nsec = static_cast<int64_t>((timeout_seconds - std::floor(timeout_seconds)) * 1e9)};
 
+    dex::shared_memory::RunResult last_run_result = dex::shared_memory::RunResult::Success;
+
     while (control.IsRunning()) {
-      const auto run_result = consumer.Run(
+      last_run_result = consumer.Run(
           [&](const dex::camera::CameraFrameBuffer& buffer) {
             const auto now = std::chrono::steady_clock::now();
             const auto now_nanos = static_cast<uint64_t>(
@@ -52,15 +54,20 @@ int main(int argc, char* argv[]) {
           },
           &timeout);
 
-      if (run_result == dex::shared_memory::RunResult::Timeout) {
+      if (last_run_result == dex::shared_memory::RunResult::Timeout) {
         SPDLOG_WARN("Consumer timed out waiting for data, retrying...");
         control.Reset();
         continue;
       }
 
-      if (run_result != dex::shared_memory::RunResult::Success) {
+      if (last_run_result != dex::shared_memory::RunResult::Success) {
         break;
       }
+    }
+
+    if (last_run_result == dex::shared_memory::RunResult::Error) {
+      SPDLOG_ERROR("Consumer exited due to fatal error");
+      return 1;
     }
   } catch (const std::exception& e) {
     SPDLOG_ERROR("Exception occurred: {}", e.what());

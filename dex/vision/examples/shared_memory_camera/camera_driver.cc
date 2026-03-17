@@ -50,6 +50,11 @@ int main(int argc, char* argv[]) {
       target_fps = std::stof(std::string(args[2]));
     }
 
+    if (target_fps <= 0.0f) {
+      SPDLOG_ERROR("Target FPS must be positive, got: {}", target_fps);
+      return 1;
+    }
+
     const auto frame_duration = std::chrono::duration<double>(1.0f / target_fps);
 
     SPDLOG_INFO("Starting mock camera driver on '{}' at {} FPS", shm_name, target_fps);
@@ -88,7 +93,8 @@ int main(int argc, char* argv[]) {
         std::this_thread::sleep_for(frame_duration - elapsed);
       }
 
-      if (frame_count % static_cast<uint64_t>(target_fps) == 0) {
+      const auto log_interval = std::max(static_cast<uint64_t>(1), static_cast<uint64_t>(target_fps));
+      if (frame_count % log_interval == 0) {
         SPDLOG_INFO("Published {} frames", frame_count);
       }
     });
