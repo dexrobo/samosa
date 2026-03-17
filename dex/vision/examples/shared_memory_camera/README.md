@@ -23,10 +23,10 @@ bazel build //dex/vision/examples/shared_memory_camera/...
 
 Run the driver in one terminal:
 ```bash
-./bazel-bin/dex/vision/examples/shared_memory_camera/camera_driver my_camera_stream 30
+bazel run //dex/vision/examples/shared_memory_camera:camera_driver -- my_camera_stream 30
 ```
 
 Run the consumer in another terminal:
 ```bash
-./bazel-bin/dex/vision/examples/shared_memory_camera/camera_consumer my_camera_stream
+bazel run //dex/vision/examples/shared_memory_camera:camera_consumer -- my_camera_stream
 ```

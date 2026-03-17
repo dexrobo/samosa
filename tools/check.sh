@@ -2,11 +2,11 @@
 # Comprehensive check script for Samosa.
 #
 # Usage:
-#   ./tools/check.sh [all|format|lint|test-prod|test-asan|...] [extra-bazel-args]
+#   bazel run check -- [all|format|lint|test-prod|test-asan|...] [extra-bazel-args]
 #
 # Examples:
-#   ./tools/check.sh all                    # Run everything locally
-#   ./tools/check.sh lint --verbose_failures # Run linting with extra flags
+#   bazel run check -- all                    # Run everything locally
+#   bazel run check -- lint --verbose_failures # Run linting with extra flags
 #
 # Hybrid Logic:
 #   This script automatically detects if it's running in a CI environment (GitHub Actions
@@ -16,7 +16,11 @@
 set -euo pipefail
 
 # Ensure we are in the workspace root
-cd "$(dirname "$0")/.."
+if [[ -n "${BUILD_WORKSPACE_DIRECTORY:-}" ]]; then
+    cd "$BUILD_WORKSPACE_DIRECTORY"
+else
+    cd "$(dirname "$0")/.."
+fi
 
 # Colors for output
 GREEN='\033[0;32m'

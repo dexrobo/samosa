@@ -112,13 +112,13 @@ Before submitting a Pull Request, you **must** run the comprehensive verificatio
 
 ```bash
 # Run all formatters, linters, and tests
-./tools/check.sh all
+bazel run check -- all
 ```
 
 ### PR Guidelines
 1. **Tests**: Every fix or feature requires a corresponding test case in `dex/infrastructure/shared_memory/`.
 2. **Sanitizers**: Ensure your changes pass under both `asan-dynamic` and `tsan-dynamic` configurations.
-3. **Style**: Code must be formatted using `bazel run //tools/format`.
+3. **Style**: Code must be formatted using `bazel run format`.
 
 ## License
 Samosa is released under the MIT License. See [LICENSE](LICENSE) for details.

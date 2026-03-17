@@ -27,6 +27,11 @@ alias(
 )
 
 alias(
+    name = "check",
+    actual = "//tools:check",
+)
+
+alias(
     name = "format_cc",
     actual = "//tools/format:clang_format",
 )
