@@ -14,9 +14,6 @@ build --copt=-DSPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 build:linux --repo_env=CC=gcc-12
 build:linux --repo_env=GCOV=gcov-12
 
-# macOS
-build:macos --repo_env=CC=clang
-
 # --- Strict warning flags ---
 build --copt=-Wno-unused-parameter
 build --cxxopt=-Wno-unused-parameter
