@@ -1,0 +1,21 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary")
+
+cc_binary(
+    name = "camera_driver",
+    srcs = ["camera_driver.cc"],
+    deps = [
+        "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_streaming",
+        "@com_github_gabime_spdlog//:spdlog",
+    ],
+)
+
+cc_binary(
+    name = "camera_consumer",
+    srcs = ["camera_consumer.cc"],
+    deps = [
+        "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_streaming",
+        "@com_github_gabime_spdlog//:spdlog",
+    ],
+)
