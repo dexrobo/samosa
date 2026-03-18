@@ -4,9 +4,8 @@ import threading
 import time
 import unittest
 
-import numpy as np
-
 import dex.vision.shared_memory as shm
+import numpy as np
 
 
 class TestSharedMemoryCameraBindings(unittest.TestCase):
