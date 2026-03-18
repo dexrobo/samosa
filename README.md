@@ -141,6 +141,8 @@ docker run -d \
     --name samosa-dev \
     --init \
     --ipc=host \
+    --cap-add=SYS_PTRACE \
+    --security-opt seccomp=unconfined \
     -p 9876:9876 \
     -v $(pwd):/workspace \
     samosa-env \
@@ -167,6 +169,8 @@ docker start samosa-dev
 **Why these flags?**
 * `--init`: Enables a process reaper to prevent `<defunct>` (zombie) processes when killing benchmarks.
 * `--ipc=host`: Shared memory performance is best when using the host IPC namespace.
+* `--cap-add=SYS_PTRACE`: Required for C++ debuggers (GDB/LLDB) and profilers to attach to processes.
+* `--security-opt seccomp=unconfined`: Required for TSAN/Sanitizers to correctly set process personality.
 * `-p 9876:9876`: Maps the default Rerun port for external visualization.
 
 ### 3. Connecting an External Rerun Viewer
