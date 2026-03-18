@@ -88,6 +88,43 @@ consumer.Run([](const Telemetry& buffer, uint counter) {
 });
 ```
 
+### 5. Fine-Grained Control (Step-by-Step)
+If you need to manage your own loop or integrate with an external event loop, you can use `ProduceSingle` and `ConsumeSingle`. These methods perform a single atomic transaction without entering a persistent loop.
+
+```cpp
+// Producer
+producer.ProduceSingle([](Telemetry& buffer, uint counter) {
+    // Fill buffer...
+});
+
+// Consumer
+timespec timeout = {1, 0};
+auto result = consumer.ConsumeSingle([](const Telemetry& buffer) {
+    // Process buffer...
+}, &timeout);
+```
+
+## Python Bindings
+
+Samosa provides high-performance Python bindings (via `nanobind`) for integration with NumPy, OpenCV, and Rerun. The bindings support zero-copy image access and explicit GIL management for high-frequency streaming.
+
+```python
+import dex.vision.shared_memory as shm
+
+# Pre-allocate buffer for zero-allocation consumption
+frame = shm.CameraFrameBuffer()
+consumer = shm.Consumer("camera_stream")
+
+while True:
+    status = consumer.read_into(frame)
+    if status == shm.RunResult.Success:
+        process(frame.color_image_bytes)
+    elif status == shm.RunResult.Timeout:
+        shm.StreamingControl.instance().reset()
+```
+
+For more details, see the [Python Bindings README](dex/vision/bindings/python/README.md).
+
 ## Performance & Benchmarking
 
 Samosa includes a specialized benchmarking tool to measure end-to-end latency and frame-skip statistics under various loads.

@@ -26,6 +26,8 @@ The bindings bridge the gap between the low-latency C++ `dex::shared_memory` sys
 | `std::array<char, 64>` | `str` | Automatic conversion between null-terminated C-strings and Python strings. |
 | `Producer<Buffer>` | `shm.Producer` | Binding for the C++ Producer template. |
 | `Consumer<Buffer>` | `shm.Consumer` | Binding for the C++ Consumer template. |
+| `RunResult` | `shm.RunResult` | Enum (Success, Stopped, Timeout, Error). |
+| `kMaxWidth` / `kMaxHeight` | `shm.MAX_WIDTH` / `MAX_HEIGHT` | Constants synced from C++ `dex::camera`. |
 
 ## Lifecycle and Ownership
 
@@ -41,7 +43,7 @@ sequenceDiagram
     C->>S: shm_open / ftruncate
     P->>C: Producer("cam0")
     C->>S: mmap
-    P->>C: write(buffer)
+    P->>C: ProduceSingle(lambda)
     C->>S: Atomic write to segment
     Note over P, S: Lifecycle managed by Python GC
     P->>C: destroy_shared_memory("cam0")
@@ -70,7 +72,7 @@ graph TD
 
 ## Usage Example
 
-### Consumer (Subscriber)
+### Consumer (Subscriber) - Zero-Allocation Pattern
 ```python
 import dex.vision.shared_memory as shm
 import numpy as np
@@ -78,13 +80,22 @@ import numpy as np
 # Connect to existing segment
 consumer = shm.Consumer("camera_stream")
 
+# Pre-allocate the buffer to avoid 20MB allocations in the hot loop
+frame = shm.CameraFrameBuffer()
+
 while True:
-    # read() blocks until a new frame is available (releasing the GIL)
-    frame = consumer.read()
-    if frame:
+    # read_into() blocks until a new frame is available (releasing the GIL)
+    status = consumer.read_into(frame)
+    if status == shm.RunResult.Success:
         # Zero-copy access to image data
         image = np.array(frame.color_image_bytes[:frame.color_image_size]).reshape((frame.color_height, frame.color_width, 3))
         print(f"Received frame {frame.frame_id}")
+    elif status == shm.RunResult.Timeout:
+        # Reset the control to keep waiting if the producer is just slow
+        shm.StreamingControl.instance().reset()
+    else:
+        # Stopped (SIGINT) or Error
+        break
 ```
 
 ### Producer (Publisher)
@@ -97,7 +108,9 @@ producer = shm.Producer("camera_stream")
 
 frame = shm.CameraFrameBuffer()
 frame.frame_id = 0
-# ... populate other fields ...
+# Use constants synced from C++ source of truth
+frame.color_width = shm.MAX_WIDTH
+frame.color_height = shm.MAX_HEIGHT
 
 while True:
     producer.write(frame)
