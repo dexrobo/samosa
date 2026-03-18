@@ -25,15 +25,15 @@ concept MonitorCallback = std::invocable<Fn, const Buffer&> || std::invocable<Fn
 enum class MonitorReadMode {
   // Do not begin from an already-active producer write episode. If validation detects overlap while
   // copying, the monitor discards or retries within the caller's timeout budget.
-  SkipDuringProducerWrite,
+  SkipIfBusy,
 
   // If the producer is already writing, wait for `sequence_and_writing` to change within the timeout
   // budget. Only validated snapshots are returned.
-  WaitForProducerWriteCompletion,
+  WaitForStableSnapshot,
 
   // Best-effort mode. The monitor may sample while a producer write is in flight, but still performs
   // post-copy validation and discards detected overlap when possible.
-  ReadDuringProducerWrite
+  Opportunistic
 };
 
 /**
@@ -89,7 +89,7 @@ class Monitor {
    * @return Optional reference to the latest buffer, or nullopt if no valid buffer
    */
   std::optional<std::reference_wrapper<const Buffer>> GetLatestBuffer(
-      double timeout_sec = 0.1, MonitorReadMode read_mode = MonitorReadMode::WaitForProducerWriteCompletion);
+      double timeout_sec = 0.1, MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot);
 
   /**
    * @brief Run a monitoring loop that calls a function when new data is available
@@ -101,7 +101,7 @@ class Monitor {
    * TODO: Support monitor_fn with 1 argument. Current implementation only supports 2.
    */
   void Run(auto&& monitor_fn, double timeout_sec = 0.1, uint max_iterations = 0,
-           MonitorReadMode read_mode = MonitorReadMode::ReadDuringProducerWrite)
+           MonitorReadMode read_mode = MonitorReadMode::Opportunistic)
     requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>;
 
  private:

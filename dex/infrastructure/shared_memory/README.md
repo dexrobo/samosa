@@ -6,19 +6,24 @@ This directory contains Samosa's lock-free shared-memory snapshot streaming prim
 * `Consumer`: participates in the producer/consumer publication handshake and reads published snapshots
 * `Monitor`: passively samples producer-written state for debugging, diagnostics, and observability
 
-The core design goal is that the producer stays non-blocking and the consumer always moves toward the latest usable snapshot.
+The main idea is simple:
+
+* `Producer` and `Consumer` are the real dataflow
+* `Monitor` is just watching from the side
+
+If you keep that mental model in mind, the monitor API becomes much easier to reason about.
 
 ## Producer / Consumer Model
 
-The normal dataflow is between exactly one producer and one consumer.
+The normal streaming path is between exactly one producer and one consumer.
 
 * The producer writes POD snapshots into one of two shared-memory slots.
 * The consumer uses `read_index` and `write_index` as the ownership and publication handshake.
-* The producer and consumer are the only parties that participate in that handshake.
+* Only the producer and consumer participate in that handshake.
 
-`Monitor` is intentionally outside that flow.
+`Monitor` is intentionally outside that protocol.
 
-## Monitor Overview
+## What `Monitor` Is For
 
 `Monitor` is a passive, best-effort observer.
 
@@ -26,17 +31,34 @@ The normal dataflow is between exactly one producer and one consumer.
 * It does not write `write_index`.
 * It does not reserve buffers.
 * It does not add backpressure to the producer or consumer.
-* It samples producer-written monitor metadata, not consumer-published state.
 * It may skip samples.
 * It returns only snapshots that pass monitor-side validation.
 
-That makes `Monitor` useful when you want visibility into what the producer has most recently written, without perturbing the production producer/consumer path.
+Best-effort here means:
+
+* the monitor may skip snapshots
+* a read may return nothing if the producer is busy or validation fails
+* the monitor tries to return only validated whole-snapshot copies
+
+In other words:
+
+* lossy in time: yes
+* intentionally lossy in snapshot integrity: no
+
+That makes it useful for:
+
+* debugging
+* health checks
+* lightweight observability
+* "what is the producer writing right now?" style inspection
+
+It is **not** a second consumer.
 
 ## What The Monitor Actually Samples
 
 The monitor does **not** read "the snapshot currently published to the consumer."
 
-Instead, it samples:
+Instead, it samples producer-written monitor metadata:
 
 * `last_written_buffer`
 * monitor sequence metadata
@@ -50,7 +72,26 @@ not:
 
 > "What snapshot is the consumer currently allowed to read?"
 
-Those are often close, but they are intentionally not the same contract.
+Those are often close, but they are intentionally different contracts.
+
+## Snapshot Validation
+
+All monitor modes use post-copy validation.
+
+At a high level, the monitor:
+
+1. chooses the most recent producer-written slot it can inspect
+2. copies that slot into local memory
+3. checks monitor metadata again after the copy
+4. rejects the sample if the metadata suggests the producer overlapped the copy
+
+This is why the monitor may skip samples:
+
+* if the producer is busy
+* if the timeout expires
+* if validation says the copied snapshot is suspicious
+
+The goal is to skip questionable samples rather than knowingly return partial or mixed data.
 
 ## Basic Usage
 
@@ -62,7 +103,7 @@ using dex::shared_memory::MonitorReadMode;
 
 Monitor<Telemetry> monitor{"/telemetry_stream"};
 
-auto latest = monitor.GetLatestBuffer(0.05, MonitorReadMode::WaitForProducerWriteCompletion);
+auto latest = monitor.GetLatestBuffer(0.05, MonitorReadMode::WaitForStableSnapshot);
 if (latest) {
   Inspect(latest->get());
 }
@@ -77,40 +118,71 @@ monitor.Run(
     },
     0.1,
     0,
-    MonitorReadMode::WaitForProducerWriteCompletion);
+    MonitorReadMode::WaitForStableSnapshot);
 ```
 
-## Monitor Read Modes
+## The Three Modes In Plain English
 
-`MonitorReadMode` controls how aggressive the monitor should be when the producer may be in the middle of a write.
+The modes only answer one question:
 
-### `SkipDuringProducerWrite`
+> "What should the monitor do if the producer might be writing right now?"
+
+There are only three policies:
+
+1. `SkipIfBusy`: do not even try right now
+2. `WaitForStableSnapshot`: wait for a stable moment, then try
+3. `Opportunistic`: try immediately anyway
+
+## Quick Decision Guide
+
+```mermaid
+flowchart TD
+    A[Need a monitor snapshot] --> B{Is it OK to wait?}
+    B -- No --> C{Is it OK to skip if producer is busy?}
+    C -- Yes --> D[SkipIfBusy]
+    C -- No --> E[Opportunistic]
+    B -- Yes --> F[WaitForStableSnapshot]
+```
+
+If you are unsure, start with `WaitForStableSnapshot`.
+
+## Mode Semantics
+
+### `SkipIfBusy`
+
+Think:
+
+> "If the producer looks busy, come back later."
 
 Use this when:
 
 * you want the monitor to stay conservative
-* you do not want to start from an already-active producer write episode
 * dropping samples is fine
+* you do not want to spend time waiting
 
 Behavior:
 
 * if the producer is already writing when the read begins, the monitor returns `nullopt`
-* if post-copy validation detects overlap, the monitor discards the sample
-* the monitor may retry within the timeout budget, but it will not knowingly accept an overlapped copy
+* if validation detects overlap after the copy, the monitor discards the sample
+* it will not knowingly accept a suspicious in-flight copy
 
 Recommended for:
 
 * dashboards
 * periodic health sampling
-* observability paths where "skip instead of risk" is the right bias
+* low-priority observability loops
 
-### `WaitForProducerWriteCompletion`
+### `WaitForStableSnapshot`
+
+Think:
+
+> "Give me the strongest monitor snapshot you can get within this timeout."
 
 Use this when:
 
 * you want the strongest validated monitor snapshot
-* you can tolerate waiting up to a timeout budget
-* you want the reported sequence to correspond to the accepted snapshot
+* you can tolerate waiting up to `timeout_sec`
+* you care that the returned sequence matches the accepted sample
 
 Behavior:
 
@@ -121,16 +193,20 @@ Behavior:
 
 Recommended for:
 
-* debug tooling
+* debugging tools
 * manual inspection utilities
-* correctness-oriented diagnostics where latency is less important than avoiding suspicious samples
+* correctness-oriented diagnostics
 
-### `ReadDuringProducerWrite`
+### `Opportunistic`
+
+Think:
+
+> "Try now. If the copy looks suspicious, throw it away."
 
 Use this when:
 
 * you want the most aggressive best-effort sampling
-* you prefer "try now" over waiting
+* you prefer trying immediately over waiting
 * skipping some samples is acceptable
 
 Behavior:
@@ -144,30 +220,21 @@ Recommended for:
 
 * high-rate telemetry taps
 * lightweight debug views
-* sampling loops that should keep trying rather than waiting for quiet periods
+* "show me something current if you can" tools
 
-## Choosing A Mode
-
-Use `SkipDuringProducerWrite` when you want the least intrusive and most conservative sampling behavior.
-
-Use `WaitForProducerWriteCompletion` when you want the strongest validated monitor result and can spend a timeout budget to get it.
-
-Use `ReadDuringProducerWrite` when you want the monitor to stay aggressive and opportunistic, while still rejecting obviously suspicious copies.
-
-If you are unsure, start with `WaitForProducerWriteCompletion`.
-
-## Guarantees
+## What The Monitor Guarantees
 
 The monitor guarantees:
 
 * passive observation only
 * no writes to producer/consumer ownership state
 * no locks in the monitor path
-* bounded waiting in `WaitForProducerWriteCompletion`
+* bounded waiting in `WaitForStableSnapshot`
 * validated snapshots only
 * sequence numbers returned to callbacks match the accepted snapshot
+* lossy sampling in time, not intentional lossiness in snapshot integrity
 
-## Non-Guarantees
+## What The Monitor Does Not Guarantee
 
 The monitor intentionally does **not** guarantee:
 
@@ -176,8 +243,9 @@ The monitor intentionally does **not** guarantee:
 * zero waiting
 * zero drops
 * zero retries
+* perfect detection of every theoretical race on every architecture
 
-It is a diagnostics primitive, not a second consumer.
+It is a diagnostics primitive, not part of the production ownership flow.
 
 ## Why The Design Stays Passive
 
@@ -191,14 +259,14 @@ That means:
 * no producer blocking
 * no producer backpressure from the monitor
 
-This is the key tradeoff:
+This is the core tradeoff:
 
 * monitor snapshots are best-effort and may be skipped
 * production dataflow stays fast and isolated
 
 ## Notes
 
-* The buffer type stored in shared memory must be POD.
+* The shared-memory buffer type must be POD.
 * The streaming path assumes exactly one producer.
 * For production dataflow, use `Consumer`.
 * For passive inspection, use `Monitor`.

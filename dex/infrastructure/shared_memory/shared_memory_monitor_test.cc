@@ -79,7 +79,7 @@ TEST_F(SharedMemoryMonitorTest, InvalidSharedMemory) {
   EXPECT_FALSE(monitor.IsValid());
 
   // Try to get the latest buffer
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipDuringProducerWrite);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipIfBusy);
   EXPECT_FALSE(buffer_opt.has_value());
 }
 
@@ -99,7 +99,7 @@ TEST_F(SharedMemoryMonitorTest, NoValidBuffer) {
   ASSERT_TRUE(monitor.IsValid());
 
   // Try to get the latest buffer
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipDuringProducerWrite);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipIfBusy);
   EXPECT_FALSE(buffer_opt.has_value());
 }
 
@@ -141,13 +141,13 @@ TEST_F(SharedMemoryMonitorTest, IndependentReading) {
   ASSERT_TRUE(monitor.IsValid());
 
   // Monitor should read from BufferA (last written) regardless of read/write indices
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::ReadDuringProducerWrite);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::Opportunistic);
   ASSERT_TRUE(buffer_opt.has_value());
   EXPECT_EQ(std::string(buffer_opt->get().data()), message_a);
 
   SetPublishedSnapshot(shared_memory, detail::BufferState::BufferB, 2, message_b);
   // Monitor should now read from BufferB
-  buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::ReadDuringProducerWrite);
+  buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::Opportunistic);
   ASSERT_TRUE(buffer_opt.has_value());
   EXPECT_EQ(std::string(buffer_opt->get().data()), message_b);
 }
@@ -167,7 +167,7 @@ TEST_F(SharedMemoryMonitorTest, SkipDuringWrite) {
   ASSERT_TRUE(monitor.IsValid());
 
   // Should skip reading while producer is writing
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipDuringProducerWrite);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::SkipIfBusy);
   EXPECT_FALSE(buffer_opt.has_value());
 }
 
@@ -219,7 +219,7 @@ TEST_F(SharedMemoryMonitorTest, WaitForCompletion) {
   get_latest_buffer_started.store(true, std::memory_order_release);
 
   // Should wait for producer to finish writing
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::WaitForProducerWriteCompletion);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::WaitForStableSnapshot);
 
   // Record end time and calculate duration
   auto elapsed_time = std::chrono::steady_clock::now() - start_time;
@@ -251,7 +251,7 @@ TEST_F(SharedMemoryMonitorTest, WaitForCompletionTimeout) {
   auto start_time = std::chrono::steady_clock::now();
 
   // Should timeout waiting for producer
-  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::WaitForProducerWriteCompletion);
+  auto buffer_opt = monitor.GetLatestBuffer(0.1, MonitorReadMode::WaitForStableSnapshot);
 
   // Record end time and calculate duration
   auto elapsed_time = std::chrono::steady_clock::now() - start_time;
@@ -272,7 +272,7 @@ TEST_F(SharedMemoryMonitorTest, RejectsInvalidLastWrittenBufferId) {
 
   Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
   ASSERT_TRUE(monitor.IsValid());
-  EXPECT_FALSE(monitor.GetLatestBuffer(0.01, MonitorReadMode::ReadDuringProducerWrite).has_value());
+  EXPECT_FALSE(monitor.GetLatestBuffer(0.01, MonitorReadMode::Opportunistic).has_value());
 }
 
 TEST_F(SharedMemoryMonitorTest, RunWithCallback) {
@@ -547,7 +547,7 @@ TEST_F(SharedMemoryMonitorTest, MonitorDoesNotTouchReadOrWriteIndex) {
 
   Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
   ASSERT_TRUE(monitor.IsValid());
-  auto buffer_opt = monitor.GetLatestBuffer(0.01, MonitorReadMode::ReadDuringProducerWrite);
+  auto buffer_opt = monitor.GetLatestBuffer(0.01, MonitorReadMode::Opportunistic);
   ASSERT_TRUE(buffer_opt.has_value());
   EXPECT_EQ(std::string(buffer_opt->get().data()), "passive");
 
@@ -555,7 +555,7 @@ TEST_F(SharedMemoryMonitorTest, MonitorDoesNotTouchReadOrWriteIndex) {
   EXPECT_EQ(shared_memory.Get()->write_index.load(std::memory_order_acquire), write_before);
 }
 
-TEST_F(SharedMemoryMonitorTest, ReadDuringProducerWriteDiscardsOverlappingCopy) {
+TEST_F(SharedMemoryMonitorTest, OpportunisticDiscardsOverlappingCopy) {
   auto shared_memory = SharedMemory<test::LargeBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
       shared_memory_name_, InitializeBuffer<test::LargeBuffer>);
   ASSERT_TRUE(shared_memory.IsValid());
@@ -588,7 +588,7 @@ TEST_F(SharedMemoryMonitorTest, ReadDuringProducerWriteDiscardsOverlappingCopy) 
 
   Monitor<test::LargeBuffer, 2, LockFreeSharedMemoryBuffer> monitor{shared_memory_name_};
   ASSERT_TRUE(monitor.IsValid());
-  EXPECT_FALSE(monitor.GetLatestBuffer(0.01, MonitorReadMode::ReadDuringProducerWrite).has_value());
+  EXPECT_FALSE(monitor.GetLatestBuffer(0.01, MonitorReadMode::Opportunistic).has_value());
 
   stop_writer.store(true, std::memory_order_release);
   writer.join();

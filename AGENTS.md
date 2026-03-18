@@ -60,3 +60,13 @@ docker exec -it samosa-dev bazel run check -- all
 * Keep changes minimal and local to the task.
 * Add or update tests for behavior changes.
 * Do not make durable policy changes in this file unless asked.
+
+## Documentation Style
+
+* Write README content, doc comments, and explanatory comments for a new developer or user who does not have prior context.
+* Prefer standalone explanations over change-history framing. Do not describe behavior as "old vs new" unless historical context is explicitly requested.
+* Explain the current contract, intended use, guarantees, and non-guarantees directly.
+* When describing modes or options, optimize for user intent and decision-making first: what it is for, when to use it, and what tradeoff it makes.
+* Prefer clear, concrete language over implementation jargon when writing user-facing docs.
+* Comments in code should explain why or clarify non-obvious behavior, not narrate trivial mechanics.
+* When a concept is easier to understand visually, small diagrams are welcome, especially in READMEs and developer-facing docs.

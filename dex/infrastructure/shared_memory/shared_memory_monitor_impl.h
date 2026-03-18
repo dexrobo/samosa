@@ -67,11 +67,11 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
   while (attempts++ < kMaxValidationAttempts && streaming_control_.get().IsRunning()) {
     const uint32_t initial_packed = shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
     if (detail::IsWriting(initial_packed)) {
-      if (read_mode == MonitorReadMode::SkipDuringProducerWrite) {
+      if (read_mode == MonitorReadMode::SkipIfBusy) {
         SPDLOG_DEBUG("Monitor: Skipping read because producer write is already active");
         return std::nullopt;
       }
-      if (read_mode == MonitorReadMode::WaitForProducerWriteCompletion) {
+      if (read_mode == MonitorReadMode::WaitForStableSnapshot) {
         const auto now = std::chrono::steady_clock::now();
         if (now >= deadline) {
           return std::nullopt;
@@ -106,7 +106,7 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
         gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, slot_index).load(std::memory_order_acquire);
     if (detail::IsWriting(pre_slot_packed) ||
         detail::GetSequence(pre_slot_packed) == detail::kNoCompletedMonitorSequence) {
-      if (read_mode == MonitorReadMode::WaitForProducerWriteCompletion) {
+      if (read_mode == MonitorReadMode::WaitForStableSnapshot) {
         const auto now = std::chrono::steady_clock::now();
         if (now >= deadline) {
           return std::nullopt;
@@ -120,7 +120,7 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
         }
         continue;
       }
-      if (read_mode == MonitorReadMode::SkipDuringProducerWrite) {
+      if (read_mode == MonitorReadMode::SkipIfBusy) {
         return std::nullopt;
       }
     }
