@@ -5,7 +5,7 @@
 # Core Packages
 av==14.0.1
 numpy==2.2.3
-opencv-python==4.11.0.86
+opencv-python-headless==4.11.0.86
 rerun-sdk==0.23.0
 
 # Transitive Dependencies
