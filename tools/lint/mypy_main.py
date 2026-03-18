@@ -13,9 +13,12 @@ def main() -> None:
     if workspace:
         os.chdir(workspace)
 
+    env = os.environ.copy()
+    env["PYTHONPATH"] = os.pathsep.join(sys.path)
+
     # Use sys.executable -m mypy to run mypy as a module
     # check=False is used because we manually propagate the return code
-    result = subprocess.run([sys.executable, "-m", "mypy", *sys.argv[1:]], check=False)  # noqa: S603
+    result = subprocess.run([sys.executable, "-m", "mypy", *sys.argv[1:]], env=env, check=False)  # noqa: S603
     sys.exit(result.returncode)
 
 
