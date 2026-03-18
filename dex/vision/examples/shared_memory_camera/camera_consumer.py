@@ -91,10 +91,11 @@ def setup_visualizer(args: argparse.Namespace, logger: logging.Logger) -> bool:
         else:
             logger.info("Rerun: Launching local viewer")
             rr.spawn()
-        return True
     except Exception as e:  # noqa: BLE001
         logger.warning("Rerun unavailable: %s. Falling back to diagnostic mode.", e)
         return False
+    else:
+        return True
 
 
 def dispatch_frame(frame_buffer: shm.CameraFrameBuffer, worker: VisualizationWorker | None) -> None:
