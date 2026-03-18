@@ -10,9 +10,8 @@ import threading
 import time
 from typing import NamedTuple
 
-import psutil
-
 import dex.vision.shared_memory as shm
+import psutil
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("benchmark")
