@@ -58,8 +58,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .def_prop_rw(
           "serial_number",
           [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.serial_number.data()); },
-          [](dex::camera::CameraFrameBuffer& buffer, const std::string& sn) {
-            dex::camera::StringToArray(sn, buffer.serial_number);
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& serial_number) {
+            dex::camera::StringToArray(serial_number, buffer.serial_number);
           })
       .def_prop_rw(
           "color_image_bytes",
