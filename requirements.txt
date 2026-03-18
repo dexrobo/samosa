@@ -14,6 +14,8 @@ Pillow==12.1.1
 pyarrow==23.0.1
 typing-extensions==4.15.0
 psutil==7.2.2
+pathspec==1.0.4
+librt==0.8.1
 
 # Project Tooling
 mypy==1.19.1
