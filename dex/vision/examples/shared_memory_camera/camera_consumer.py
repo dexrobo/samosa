@@ -51,9 +51,9 @@ def log_to_rerun(frame_buffer: shm.CameraFrameBuffer) -> None:
     raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
     image = raw_data.reshape((h, w, 3))
 
-    # Log to rerun
+    # Log to rerun with JPEG compression for better network performance
     rr.set_time_seconds("camera_time", 1e-9 * frame_buffer.timestamp_nanos)
-    rr.log("camera/image", rr.Image(image))
+    rr.log("camera/image", rr.Image(image).compress(jpeg_quality=95))
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,7 +61,31 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log diagnostics")
     parser.add_argument("shm_name", type=str, help="Name of shared memory segment")
     parser.add_argument("--no-rerun", action="store_true", help="Disable Rerun visualization")
+    parser.add_argument("--serve", action="store_true", help="Host a Rerun server for external viewers to connect")
+    parser.add_argument("--connect", type=str, help="Connect to an existing Rerun viewer (e.g. 127.0.0.1:9876)")
     return parser.parse_args()
+
+
+def init_rerun(args: argparse.Namespace, logger: logging.Logger) -> bool:
+    """Initialize Rerun based on requested mode."""
+    if not HAS_RERUN or args.no_rerun:
+        return False
+
+    try:
+        rr.init("shared_memory_consumer_py")
+        if args.serve:
+            logger.info("Rerun: Serving on 0.0.0.0:9876...")
+            rr.serve()
+        elif args.connect:
+            logger.info("Rerun: Connecting to %s...", args.connect)
+            rr.connect(args.connect)
+        else:
+            logger.info("Rerun: Spawning local viewer...")
+            rr.spawn()
+        return True
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Failed to initialize Rerun: %s. Continuing in diagnostic mode.", e)
+        return False
 
 
 def main() -> None:
@@ -70,13 +94,7 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("camera_consumer_py")
 
-    use_rerun = HAS_RERUN and not args.no_rerun
-    if use_rerun:
-        try:
-            rr.init("shared_memory_consumer_py", spawn=True)
-        except Exception:  # noqa: BLE001
-            logger.warning("Rerun failed to initialize. Continuing without Rerun.")
-            use_rerun = False
+    use_rerun = init_rerun(args, logger)
 
     consumer = shm.Consumer(args.shm_name)
     if not consumer.is_valid():
