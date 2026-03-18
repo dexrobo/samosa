@@ -26,6 +26,7 @@ cc_binary(
 py_binary(
     name = "video_producer_py",
     srcs = ["video_producer.py"],
+    main = "video_producer.py",
     deps = [
         "//dex/vision/bindings/python:shared_memory",
         "@python_deps//numpy",
@@ -36,6 +37,7 @@ py_binary(
 py_binary(
     name = "camera_consumer_py",
     srcs = ["camera_consumer.py"],
+    main = "camera_consumer.py",
     deps = [
         "//dex/vision/bindings/python:shared_memory",
         "@python_deps//numpy",
