@@ -30,12 +30,19 @@ def main() -> None:
 
     last_frame_id = -1
     while True:
-        frame_buffer = consumer.read()
-        if frame_buffer is None:
-            # If the underlying C++ control was stopped due to timeout, reset it so we can keep waiting
-            if not shm.StreamingControl.instance().is_running():
+        status, frame_buffer = consumer.read()
+        if status != shm.RunResult.Success:
+            if status == shm.RunResult.Timeout:
+                # If the underlying C++ control was stopped due to timeout, reset it so we can keep waiting
                 shm.StreamingControl.instance().reset()
-            # Yield to other processes
+                time.sleep(0.001)
+                continue
+            else:
+                logger.info("Consumer stopped with status: %s", status)
+                break
+
+        if frame_buffer is None:
+            # Should not happen if status is Success
             time.sleep(0.001)
             continue
 

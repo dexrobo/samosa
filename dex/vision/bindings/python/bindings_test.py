@@ -67,8 +67,8 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
             consumer = shm.Consumer(shm_name)
             assert consumer.is_valid()
             # Wait for any frame
-            res = consumer.read()
-            if res is not None:
+            status, res = consumer.read()
+            if status == shm.RunResult.Success and res is not None:
                 read_results.append(res)
 
         def run_producer() -> None:

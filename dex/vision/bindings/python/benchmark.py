@@ -105,7 +105,8 @@ def run_consumer(
     received_count = 0
     while not (done_event.is_set() and received_count >= num_frames):
         # 1s timeout in C++
-        if consumer.read_into(frame):
+        status = consumer.read_into(frame)
+        if status == shm.RunResult.Success:
             now_ns = time.time_ns()
             latency_ms = (now_ns - frame.timestamp_nanos) / 1e6
             latencies_ms.append(latency_ms)
@@ -114,14 +115,19 @@ def run_consumer(
 
             if received_count % 100 == 0:
                 logger.info("[Consumer] Received %d frames...", received_count)
-        elif not shm.StreamingControl.instance().is_running():
-            logger.warning("[Consumer] Streaming control stopped.")
+        elif status == shm.RunResult.Timeout:
+            if done_event.is_set():
+                break
+            # Reset so we can wait again if the system is still theoretically running
+            shm.StreamingControl.instance().reset()
+        else:
+            logger.warning("[Consumer] Exiting loop with status: %s", status)
             break
 
         if done_event.is_set() and received_count > 0:
             # Check if any more frames are coming, otherwise break
             time.sleep(0.1)
-            if not consumer.read_into(frame):
+            if consumer.read_into(frame) != shm.RunResult.Success:
                 break
 
     # Calculate peak memory usage for this process

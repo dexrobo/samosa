@@ -1,6 +1,7 @@
 #include <nanobind/nanobind.h>
 #include <nanobind/ndarray.h>
 #include <nanobind/stl/optional.h>
+#include <nanobind/stl/pair.h>
 #include <nanobind/stl/string.h>
 #include <nanobind/stl/vector.h>
 
@@ -29,6 +30,12 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .def("reconfigure_and_reset", [](dex::shared_memory::StreamingControl& control, bool handle_signals) {
         control.ReconfigureAndReset({.handle_signals = handle_signals});
       });
+
+  nb::enum_<dex::shared_memory::RunResult>(module_handle, "RunResult")
+      .value("Success", dex::shared_memory::RunResult::Success)
+      .value("Stopped", dex::shared_memory::RunResult::Stopped)
+      .value("Timeout", dex::shared_memory::RunResult::Timeout)
+      .value("Error", dex::shared_memory::RunResult::Error);
 
   nb::class_<dex::camera::CameraFrameBuffer>(module_handle, "CameraFrameBuffer")
       .def(nb::init<>())
@@ -120,7 +127,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .def("is_valid", &dex::shared_memory::Consumer<CameraBuffer>::IsValid)
       .def(
           "read",
-          [](dex::shared_memory::Consumer<CameraBuffer>& consumer) -> CameraBuffer* {
+          [](dex::shared_memory::Consumer<CameraBuffer>& consumer)
+              -> std::pair<dex::shared_memory::RunResult, CameraBuffer*> {
             // CameraBuffer is ~20MB, must heap allocate to avoid stack overflow.
             // Using take_ownership policy so nanobind manages the lifecycle.
             auto result = std::make_unique<CameraBuffer>();
@@ -133,14 +141,14 @@ NB_MODULE(shared_memory_bindings, module_handle) {
                 },
                 &timeout);
             if (res == dex::shared_memory::RunResult::Success && found) {
-              return result.release();
+              return {res, result.release()};
             }
-            return nullptr;
+            return {res, nullptr};
           },
           nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>())
       .def(
           "read_into",
-          [](dex::shared_memory::Consumer<CameraBuffer>& consumer, CameraBuffer& dst) -> bool {
+          [](dex::shared_memory::Consumer<CameraBuffer>& consumer, CameraBuffer& dst) -> dex::shared_memory::RunResult {
             bool found = false;
             const timespec timeout = {.tv_sec = 1, .tv_nsec = 0};
             auto res = consumer.ConsumeSingle(
@@ -149,7 +157,10 @@ NB_MODULE(shared_memory_bindings, module_handle) {
                   found = true;
                 },
                 &timeout);
-            return res == dex::shared_memory::RunResult::Success && found;
+            if (res == dex::shared_memory::RunResult::Success && !found) {
+                return dex::shared_memory::RunResult::Stopped;
+            }
+            return res;
           },
           nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"));
 }
