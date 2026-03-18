@@ -158,7 +158,7 @@ NB_MODULE(shared_memory_bindings, module_handle) {
                 },
                 &timeout);
             if (res == dex::shared_memory::RunResult::Success && !found) {
-                return dex::shared_memory::RunResult::Stopped;
+              return dex::shared_memory::RunResult::Stopped;
             }
             return res;
           },
