@@ -99,9 +99,12 @@ def setup_visualizer(args: argparse.Namespace, logger: logging.Logger) -> bool:
         return False
 
     try:
-        rr.init("camera_consumer_py")
+        # Log version to help debug host/container mismatches
+        logger.info("Rerun SDK version: %s", rr.__version__)
+
+        rr.init("camera_consumer_py", spawn=False)
         if args.serve:
-            # In Rerun 0.23.0, use serve_grpc for native viewers
+            # In Rerun 0.23.0, use serve_grpc for native viewers (port 9876)
             if hasattr(rr, "serve_grpc"):
                 logger.info("Rerun: Listening for gRPC connections on 0.0.0.0:9876")
                 rr.serve_grpc()
