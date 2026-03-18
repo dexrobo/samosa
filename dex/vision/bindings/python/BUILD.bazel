@@ -21,9 +21,8 @@ py_library(
 
 py_test(
     name = "shared_memory_bindings_test",
-    srcs = ["dex/vision/shared_memory/bindings_test.py"],
-    data = [":shared_memory_bindings.so"],
-    main = "dex/vision/shared_memory/bindings_test.py",
+    srcs = ["bindings_test.py"],
+    main = "bindings_test.py",
     deps = [
         ":shared_memory",
         "@python_deps//numpy",
@@ -32,9 +31,8 @@ py_test(
 
 py_binary(
     name = "shared_memory_benchmark",
-    srcs = ["dex/vision/shared_memory/benchmark.py"],
-    data = [":shared_memory_bindings.so"],
-    main = "dex/vision/shared_memory/benchmark.py",
+    srcs = ["benchmark.py"],
+    main = "benchmark.py",
     deps = [
         ":shared_memory",
         "@python_deps//psutil",
