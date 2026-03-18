@@ -132,7 +132,7 @@ def dispatch_frame(frame_buffer: shm.CameraFrameBuffer, worker: VisualizationWor
 
 
 def main() -> None:
-    """Main entry point for the camera consumer."""
+    """Run the camera consumer application."""
     args = parse_args()
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     logger = logging.getLogger("camera_consumer_py")
