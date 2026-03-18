@@ -40,6 +40,22 @@ except ImportError:
 import dex.vision.shared_memory as shm
 
 
+def log_to_rerun(frame_buffer: shm.CameraFrameBuffer) -> None:
+    """Log a frame to Rerun."""
+    # Extract image data
+    w = frame_buffer.color_width
+    h = frame_buffer.color_height
+    size = frame_buffer.color_image_size
+
+    # Get image data as numpy array
+    raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
+    image = raw_data.reshape((h, w, 3))
+
+    # Log to rerun
+    rr.set_time_seconds("camera_time", 1e-9 * frame_buffer.timestamp_nanos)
+    rr.log("camera/image", rr.Image(image))
+
+
 def main() -> None:
     """Run the camera reader application."""
     parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log diagnostics")
@@ -52,10 +68,12 @@ def main() -> None:
 
     use_rerun = HAS_RERUN and not args.no_rerun
     if use_rerun:
+        # We catch any initialization error (e.g. DISPLAY missing) to fallback gracefully
+        # NOTE: rr.init() doesn't return bool, it just works or raises
         try:
             rr.init("shared_memory_reader", spawn=True)
-        except Exception as e:
-            logger.warning("Failed to initialize Rerun (is DISPLAY set?): %s. Continuing without Rerun.", e)
+        except Exception:  # noqa: BLE001
+            logger.warning("Rerun failed to initialize. Continuing without Rerun.")
             use_rerun = False
 
     consumer = shm.Consumer(args.shm_name)
@@ -64,10 +82,7 @@ def main() -> None:
         return
 
     logger.info("Monitoring shared memory '%s'...", args.shm_name)
-    if use_rerun:
-        logger.info("Rerun visualization is ENABLED")
-    else:
-        logger.info("Rerun visualization is DISABLED")
+    logger.info("Rerun visualization is %s", "ENABLED" if use_rerun else "DISABLED")
 
     last_frame_id = -1
     diag_interval = 5.0  # seconds
@@ -104,18 +119,7 @@ def main() -> None:
         diag_total_latency_ms += (now_ns - frame_buffer.timestamp_nanos) / 1e6
 
         if use_rerun:
-            # Extract image data
-            w = frame_buffer.color_width
-            h = frame_buffer.color_height
-            size = frame_buffer.color_image_size
-
-            # Get image data as numpy array
-            raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
-            image = raw_data.reshape((h, w, 3))
-
-            # Log to rerun
-            rr.set_time_seconds("camera_time", 1e-9 * frame_buffer.timestamp_nanos)
-            rr.log("camera/image", rr.Image(image))
+            log_to_rerun(frame_buffer)
 
         # Periodic diagnostics
         now = time.time()
