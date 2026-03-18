@@ -65,15 +65,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    """Run the camera reader application."""
+    """Run the camera consumer_py application."""
     args = parse_args()
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("camera_reader")
+    logger = logging.getLogger("camera_consumer_py")
 
     use_rerun = HAS_RERUN and not args.no_rerun
     if use_rerun:
         try:
-            rr.init("shared_memory_reader", spawn=True)
+            rr.init("shared_memory_consumer_py", spawn=True)
         except Exception:  # noqa: BLE001
             logger.warning("Rerun failed to initialize. Continuing without Rerun.")
             use_rerun = False
