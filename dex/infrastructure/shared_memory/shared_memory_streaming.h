@@ -177,6 +177,14 @@ class Producer {
     requires detail::ProducerFunction<std::remove_reference_t<decltype(produce_fn)>, Buffer>;
 
   /**
+   * @brief Produces a single frame safely managing the internal sequence.
+   * @param produce The function used to produce a new frame.
+   */
+  void ProduceSingle(auto&& produce)
+    requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>;
+
+ private:
+  /**
    * @brief Produces a single frame.
    * @param frame_count The index of the frame being produced.
    * @param produce The function used to produce the frame data.
@@ -184,9 +192,9 @@ class Producer {
   void ProduceFrame(uint frame_count, auto&& produce)
     requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>;
 
- private:
   SharedMemoryBuffer shared_memory_buffer_;
   std::reference_wrapper<StreamingControl> streaming_control_;
+  uint current_frame_count_{0};
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -252,6 +260,16 @@ class Consumer {
     requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume_fn)>, Buffer>;
 
   /**
+   * @brief Consumes a single frame safely managing the internal sequence.
+   * @param consume The function used to process the frame.
+   * @param timeout Optional timeout for the blocking operation.
+   * @return RunResult indicating why the consumption stopped.
+   */
+  [[nodiscard]] RunResult ConsumeSingle(auto&& consume, const timespec* timeout = nullptr)
+    requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume)>, Buffer>;
+
+ private:
+  /**
    * @brief Consumes a single frame.
    * @param frame_count The expected index of the frame being consumed.
    * @param consume The function used to process the frame.
@@ -261,13 +279,13 @@ class Consumer {
   [[nodiscard]] RunResult ConsumeFrame(uint frame_count, auto&& consume, const timespec* timeout = nullptr)
     requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume)>, Buffer>;
 
- private:
   /// @return RunResult
   [[nodiscard]] RunResult HandleWaitResult(detail::WaitResult wait_result);
 
   SharedMemoryBuffer shared_memory_buffer_;
   // To get around: cppcoreguidelines-avoid-const-or-ref-data-members
   std::reference_wrapper<StreamingControl> streaming_control_;
+  uint current_frame_count_{0};
 };
 
 }  // namespace dex::shared_memory

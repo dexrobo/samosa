@@ -10,7 +10,6 @@ import rerun as rr
 import dex.vision.shared_memory as shm
 
 
-
 def main() -> None:
     """Run the rerun monitor application."""
     parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log to Rerun")

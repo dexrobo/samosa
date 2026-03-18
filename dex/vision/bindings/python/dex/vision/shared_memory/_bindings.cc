@@ -18,15 +18,17 @@
 namespace nb = nanobind;
 
 NB_MODULE(shared_memory_bindings, module_handle) {
+  module_handle.attr("MAX_WIDTH") = dex::camera::kMaxWidth;
+  module_handle.attr("MAX_HEIGHT") = dex::camera::kMaxHeight;
+
   nb::class_<dex::shared_memory::StreamingControl>(module_handle, "StreamingControl")
       .def_static("instance", &dex::shared_memory::StreamingControl::Instance, nb::rv_policy::reference)
       .def("is_running", &dex::shared_memory::StreamingControl::IsRunning)
       .def("stop", &dex::shared_memory::StreamingControl::Stop)
       .def("reset", &dex::shared_memory::StreamingControl::Reset)
-      .def("reconfigure_and_reset",
-           [](dex::shared_memory::StreamingControl& control, bool handle_signals) {
-             control.ReconfigureAndReset({.handle_signals = handle_signals});
-           });
+      .def("reconfigure_and_reset", [](dex::shared_memory::StreamingControl& control, bool handle_signals) {
+        control.ReconfigureAndReset({.handle_signals = handle_signals});
+      });
 
   nb::class_<dex::camera::CameraFrameBuffer>(module_handle, "CameraFrameBuffer")
       .def(nb::init<>())
@@ -57,7 +59,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.color_image_bytes.size()};
             return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(buffer.color_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                reinterpret_cast<uint8_t*>(
+                    buffer.color_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
                 1, shape.data());
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
@@ -69,7 +72,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.depth_image_bytes.size()};
             return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(buffer.depth_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                reinterpret_cast<uint8_t*>(
+                    buffer.depth_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
                 1, shape.data());
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
@@ -81,7 +85,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.color_stereo_right_image_bytes.size()};
             return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(buffer.color_stereo_right_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                reinterpret_cast<uint8_t*>(buffer.color_stereo_right_image_bytes
+                                               .data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
                 1, shape.data());
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
@@ -102,24 +107,26 @@ NB_MODULE(shared_memory_bindings, module_handle) {
   nb::class_<dex::shared_memory::Producer<CameraBuffer>>(module_handle, "Producer")
       .def(nb::init<const std::string&>())
       .def("is_valid", &dex::shared_memory::Producer<CameraBuffer>::IsValid)
-      .def("write", [](dex::shared_memory::Producer<CameraBuffer>& producer, const CameraBuffer& src) {
-        // Use ProduceFrame instead of Run to avoid the infinite loop
-        producer.ProduceFrame(src.frame_id, [&](CameraBuffer& dst, uint32_t) { std::memcpy(&dst, &src, sizeof(CameraBuffer)); });
-      }, nb::call_guard<nb::gil_scoped_release>());
+      .def(
+          "write",
+          [](dex::shared_memory::Producer<CameraBuffer>& producer, const CameraBuffer& src) {
+            // Use ProduceSingle instead of Run to avoid the infinite loop
+            producer.ProduceSingle([&](CameraBuffer& dst, uint32_t) { std::memcpy(&dst, &src, sizeof(CameraBuffer)); });
+          },
+          nb::call_guard<nb::gil_scoped_release>());
 
   nb::class_<dex::shared_memory::Consumer<CameraBuffer>>(module_handle, "Consumer")
       .def(nb::init<const std::string&>())
       .def("is_valid", &dex::shared_memory::Consumer<CameraBuffer>::IsValid)
       .def(
           "read",
-          [](dex::shared_memory::Consumer<CameraBuffer>& consumer, int frame_id) -> CameraBuffer* {
+          [](dex::shared_memory::Consumer<CameraBuffer>& consumer) -> CameraBuffer* {
             // CameraBuffer is ~20MB, must heap allocate to avoid stack overflow.
             // Using take_ownership policy so nanobind manages the lifecycle.
             auto result = std::make_unique<CameraBuffer>();
             bool found = false;
             const timespec timeout = {.tv_sec = 1, .tv_nsec = 0};
-            auto res = consumer.ConsumeFrame(
-                frame_id,
+            auto res = consumer.ConsumeSingle(
                 [&](const CameraBuffer& src) {
                   std::memcpy(result.get(), &src, sizeof(CameraBuffer));
                   found = true;
@@ -130,5 +137,19 @@ NB_MODULE(shared_memory_bindings, module_handle) {
             }
             return nullptr;
           },
-          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(), nb::arg("frame_id") = 0);
+          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>())
+      .def(
+          "read_into",
+          [](dex::shared_memory::Consumer<CameraBuffer>& consumer, CameraBuffer& dst) -> bool {
+            bool found = false;
+            const timespec timeout = {.tv_sec = 1, .tv_nsec = 0};
+            auto res = consumer.ConsumeSingle(
+                [&](const CameraBuffer& src) {
+                  std::memcpy(&dst, &src, sizeof(CameraBuffer));
+                  found = true;
+                },
+                &timeout);
+            return res == dex::shared_memory::RunResult::Success && found;
+          },
+          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"));
 }

@@ -101,11 +101,11 @@ def run_consumer(
 
     logger.info("[Consumer] Running until Producer finishes or %d received...", num_frames)
 
+    frame = shm.CameraFrameBuffer()
     received_count = 0
     while not (done_event.is_set() and received_count >= num_frames):
         # 1s timeout in C++
-        frame = consumer.read(0)
-        if frame:
+        if consumer.read_into(frame):
             now_ns = time.time_ns()
             latency_ms = (now_ns - frame.timestamp_nanos) / 1e6
             latencies_ms.append(latency_ms)
@@ -118,7 +118,7 @@ def run_consumer(
         if done_event.is_set() and received_count > 0:
             # Check if any more frames are coming, otherwise break
             time.sleep(0.1)
-            if not consumer.read(0):
+            if not consumer.read_into(frame):
                 break
 
     # Calculate peak memory usage for this process
@@ -195,7 +195,9 @@ def track_memory(pid_list: list[int], stop_event: threading.Event, interval: flo
     )
 
 
-def print_stats(stats: BenchmarkStats, warmup: int, mem_summary: MemorySummary) -> None:
+def print_stats(
+    stats: BenchmarkStats, warmup: int, mem_summary: MemorySummary, stable_threshold: float, leak_threshold: float
+) -> None:
     """Print the benchmark results."""
     logger.info("Benchmark Results (after %d warmup frames):", warmup)
     logger.info("  Throughput:     %.2f FPS", stats.fps)
@@ -211,13 +213,10 @@ def print_stats(stats: BenchmarkStats, warmup: int, mem_summary: MemorySummary) 
     logger.info("  Peak RSS:       %.2f MB", mem_summary.peak_rss_mb)
     logger.info("  Memory Climb:   %+.2f MB", mem_summary.climb_mb)
 
-    stable_threshold = 1.0
-    leak_threshold = 5.0
-
     if abs(mem_summary.climb_mb) < stable_threshold:
-        logger.info("  Status:         Memory is STABLE (<1MB climb)")
+        logger.info("  Status:         Memory is STABLE (<%gMB climb)", stable_threshold)
     elif mem_summary.climb_mb > leak_threshold:
-        logger.warning("  Status:         Memory is CLIMBING (>5MB climb) - Potential Leak?")
+        logger.warning("  Status:         Memory is CLIMBING (>%gMB climb) - Potential Leak?", leak_threshold)
     elif mem_summary.climb_mb < 0:
         logger.info("  Status:         Memory DECREASED (%.2f MB) - Stabilization", mem_summary.climb_mb)
     else:
@@ -231,6 +230,8 @@ def main() -> None:
     parser.add_argument("--frequency", type=float, default=120.0, help="Producer frequency in Hz")
     parser.add_argument("--frames", type=int, default=2000, help="Number of frames to benchmark")
     parser.add_argument("--warmup", type=int, default=200, help="Number of warmup frames to discard")
+    parser.add_argument("--stable_threshold", type=float, default=1.0, help="Threshold (MB) to consider memory stable")
+    parser.add_argument("--leak_threshold", type=float, default=5.0, help="Threshold (MB) to consider memory leaking")
     args = parser.parse_args()
 
     shm.destroy_shared_memory(args.shm_name)
@@ -279,7 +280,7 @@ def main() -> None:
     try:
         stats = result_queue.get(timeout=1)
         if stats and mem_summary_container:
-            print_stats(stats, args.warmup, mem_summary_container[0])
+            print_stats(stats, args.warmup, mem_summary_container[0], args.stable_threshold, args.leak_threshold)
         else:
             logger.error("Benchmark failed: Insufficient frames received.")
     except multiprocessing.queues.Empty:

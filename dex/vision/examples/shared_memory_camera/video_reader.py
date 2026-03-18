@@ -10,11 +10,6 @@ import numpy as np
 import dex.vision.shared_memory as shm
 
 
-# Constants matching C++ dex::camera
-MAX_WIDTH = 1920
-MAX_HEIGHT = 1080
-
-
 def main() -> None:
     """Run the video reader application."""
     parser = argparse.ArgumentParser(description="Read video from disk and publish to shared memory")
@@ -60,8 +55,8 @@ def main() -> None:
 
         # Resize if necessary to fit buffer constraints
         h, w, _ = frame_rgb.shape
-        if w > MAX_WIDTH or h > MAX_HEIGHT:
-            scale = min(MAX_WIDTH / w, MAX_HEIGHT / h)
+        if w > shm.MAX_WIDTH or h > shm.MAX_HEIGHT:
+            scale = min(shm.MAX_WIDTH / w, shm.MAX_HEIGHT / h)
             frame_rgb = cv2.resize(frame_rgb, (int(w * scale), int(h * scale)))
             h, w, _ = frame_rgb.shape
 
