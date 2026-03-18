@@ -218,6 +218,8 @@ def print_stats(stats: BenchmarkStats, warmup: int, mem_summary: MemorySummary) 
         logger.info("  Status:         Memory is STABLE (<1MB climb)")
     elif mem_summary.climb_mb > leak_threshold:
         logger.warning("  Status:         Memory is CLIMBING (>5MB climb) - Potential Leak?")
+    elif mem_summary.climb_mb < 0:
+        logger.info("  Status:         Memory DECREASED (%.2f MB) - Stabilization", mem_summary.climb_mb)
     else:
         logger.info("  Status:         Memory usage increased slightly (%.2f MB)", mem_summary.climb_mb)
 

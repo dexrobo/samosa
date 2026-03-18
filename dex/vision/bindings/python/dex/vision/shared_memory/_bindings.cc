@@ -33,12 +33,24 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .def_rw("color_width", &dex::camera::CameraFrameBuffer::color_width)
       .def_rw("color_height", &dex::camera::CameraFrameBuffer::color_height)
       .def_rw("color_image_size", &dex::camera::CameraFrameBuffer::color_image_size)
+      .def_rw("depth_width", &dex::camera::CameraFrameBuffer::depth_width)
+      .def_rw("depth_height", &dex::camera::CameraFrameBuffer::depth_height)
+      .def_rw("depth_image_size", &dex::camera::CameraFrameBuffer::depth_image_size)
+      .def_rw("color_stereo_right_width", &dex::camera::CameraFrameBuffer::color_stereo_right_width)
+      .def_rw("color_stereo_right_height", &dex::camera::CameraFrameBuffer::color_stereo_right_height)
+      .def_rw("color_stereo_right_image_size", &dex::camera::CameraFrameBuffer::color_stereo_right_image_size)
       .def_rw("frame_id", &dex::camera::CameraFrameBuffer::frame_id)
       .def_rw("timestamp_nanos", &dex::camera::CameraFrameBuffer::timestamp_nanos)
       .def_prop_rw(
           "camera_name", [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.camera_name.data()); },
           [](dex::camera::CameraFrameBuffer& buffer, const std::string& name) {
             dex::camera::StringToArray(name, buffer.camera_name);
+          })
+      .def_prop_rw(
+          "serial_number",
+          [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.serial_number.data()); },
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& sn) {
+            dex::camera::StringToArray(sn, buffer.serial_number);
           })
       .def_prop_rw(
           "color_image_bytes",
@@ -51,6 +63,30 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
             std::memcpy(buffer.color_image_bytes.data(), data.data(),
                         std::min(buffer.color_image_bytes.size(), data.size()));
+          })
+      .def_prop_rw(
+          "depth_image_bytes",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.depth_image_bytes.size()};
+            return nb::ndarray<nb::numpy, uint8_t>(
+                reinterpret_cast<uint8_t*>(buffer.depth_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
+            std::memcpy(buffer.depth_image_bytes.data(), data.data(),
+                        std::min(buffer.depth_image_bytes.size(), data.size()));
+          })
+      .def_prop_rw(
+          "color_stereo_right_image_bytes",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.color_stereo_right_image_bytes.size()};
+            return nb::ndarray<nb::numpy, uint8_t>(
+                reinterpret_cast<uint8_t*>(buffer.color_stereo_right_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
+                1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
+            std::memcpy(buffer.color_stereo_right_image_bytes.data(), data.data(),
+                        std::min(buffer.color_stereo_right_image_bytes.size(), data.size()));
           });
 
   using CameraBuffer = dex::camera::CameraFrameBuffer;
@@ -96,4 +132,3 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           },
           nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(), nb::arg("frame_id") = 0);
 }
-

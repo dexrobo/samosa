@@ -13,7 +13,7 @@ The bindings bridge the gap between the low-latency C++ `dex::shared_memory` sys
 - **NumPy Integration**: Uses `nb::ndarray` to provide zero-copy views into raw C++ memory buffers.
 
 ### High-Performance Memory Management
-- **Zero-Copy Image Access**: The `color_image_bytes` field is exposed as a NumPy-compatible array view. Accessing this in Python does not copy the ~20MB of image data; it merely points to the existing C++ memory segment.
+- **Zero-Copy Image Access**: The `color_image_bytes`, `depth_image_bytes`, and `color_stereo_right_image_bytes` fields are exposed as NumPy-compatible array views. Accessing these in Python does not copy the raw image data; it merely points to the existing C++ memory segment.
 - **Heap-Allocated PODs**: Since `CameraFrameBuffer` is roughly 20MB, it exceeds the default Linux stack size (8MB). The bindings ensure that all buffer instances returned to Python are heap-allocated (`std::make_unique`) and managed by Python's Garbage Collector via `nb::rv_policy::take_ownership`.
 - **GIL Management**: All blocking shared memory operations (e.g., waiting for a new frame in `Consumer.read()`) explicitly release the Python Global Interpreter Lock (GIL). This allows other Python threads to continue execution while the C++ thread is parked on a futex.
 
