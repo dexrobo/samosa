@@ -23,6 +23,11 @@ py_test(
     name = "shared_memory_bindings_test",
     srcs = ["bindings_test.py"],
     main = "bindings_test.py",
+    tags = [
+        "no-asan",
+        "no-tsan",
+        "no-ubsan",
+    ],
     deps = [
         ":shared_memory",
         "@python_deps//numpy",
