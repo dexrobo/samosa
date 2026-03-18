@@ -31,7 +31,7 @@ inline timespec DurationToTimespec(const std::chrono::steady_clock::duration dur
   const auto nanoseconds = std::chrono::duration_cast<std::chrono::nanoseconds>(duration);
   const auto sec = std::chrono::duration_cast<std::chrono::seconds>(nanoseconds);
   const auto remainder = nanoseconds - sec;
-  return timespec{.tv_sec = static_cast<time_t>(sec.count()), .tv_nsec = static_cast<long>(remainder.count())};
+  return timespec{.tv_sec = static_cast<time_t>(sec.count()), .tv_nsec = static_cast<int64_t>(remainder.count())};
 }
 
 inline bool IsValidBufferSlotId(const uint32_t raw_slot_id) {
@@ -51,6 +51,99 @@ void InvokeMonitor(auto&& monitor_fn, const auto& buffer, uint32_t /*sequence*/)
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
+bool Monitor<Buffer, buffer_size, SharedMemoryBuffer>::WaitForMonitorStateChange(
+    const uint32_t expected_packed, const std::chrono::steady_clock::time_point& deadline) const {
+  const auto now = std::chrono::steady_clock::now();
+  if (now >= deadline) {
+    return false;
+  }
+
+  const auto remaining = deadline - now;
+  const timespec timeout = detail::DurationToTimespec(remaining);
+  const auto wait_result =
+      detail::GetDefaultFutex()->Wait(shared_memory_buffer_.Get()->sequence_and_writing, expected_packed, &timeout);
+  if (wait_result != detail::WaitResult::Success) {
+    SPDLOG_DEBUG("Monitor: Wait returned {} while waiting for producer state change", static_cast<int>(wait_result));
+    return false;
+  }
+  return true;
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
+auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::HandleInitialState(
+    const MonitorReadMode read_mode, const uint32_t initial_packed,
+    const std::chrono::steady_clock::time_point& deadline) const -> InitialStateAction {
+  if (!detail::IsWriting(initial_packed)) {
+    return InitialStateAction::Continue;
+  }
+
+  if (read_mode == MonitorReadMode::SkipIfBusy) {
+    SPDLOG_DEBUG("Monitor: Skipping read because producer write is already active");
+    return InitialStateAction::ReturnNone;
+  }
+
+  if (read_mode != MonitorReadMode::WaitForStableSnapshot) {
+    return InitialStateAction::Continue;
+  }
+
+  if (!WaitForMonitorStateChange(initial_packed, deadline)) {
+    return InitialStateAction::ReturnNone;
+  }
+  return InitialStateAction::Retry;
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
+auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::SelectCandidateSlot(
+    const MonitorReadMode read_mode, const uint32_t initial_packed,
+    const std::chrono::steady_clock::time_point& deadline) const -> std::optional<CandidateSlot> {
+  const uint32_t raw_slot_id = shared_memory_buffer_.Get()->last_written_buffer.load(std::memory_order_acquire);
+  if (!detail::IsValidBufferSlotId(raw_slot_id)) {
+    if (raw_slot_id != static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable))) {
+      SPDLOG_WARN("Monitor: Invalid last_written_buffer value {}", raw_slot_id);
+    }
+    return std::nullopt;
+  }
+  if (raw_slot_id == static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable))) {
+    return std::nullopt;
+  }
+
+  const auto slot = static_cast<detail::BufferState>(raw_slot_id);
+  const auto slot_index = detail::ToBufferIndex(slot);
+  const uint32_t pre_slot_packed =
+      gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, slot_index).load(std::memory_order_acquire);
+  const bool slot_is_unavailable =
+      detail::IsWriting(pre_slot_packed) || detail::GetSequence(pre_slot_packed) == detail::kNoCompletedMonitorSequence;
+  if (!slot_is_unavailable) {
+    return CandidateSlot{.raw_slot_id = raw_slot_id, .slot_index = slot_index, .pre_slot_packed = pre_slot_packed};
+  }
+
+  if (read_mode == MonitorReadMode::SkipIfBusy) {
+    return std::nullopt;
+  }
+  if (read_mode == MonitorReadMode::WaitForStableSnapshot && WaitForMonitorStateChange(initial_packed, deadline)) {
+    return CandidateSlot{.raw_slot_id = static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable)),
+                         .slot_index = 0,
+                         .pre_slot_packed = detail::kNoCompletedMonitorSequence};
+  }
+  return std::nullopt;
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
+bool Monitor<Buffer, buffer_size, SharedMemoryBuffer>::IsAcceptedSnapshot(const CandidateSlot& candidate) const {
+  const uint32_t post_slot_packed =
+      gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, candidate.slot_index)
+          .load(std::memory_order_acquire);
+  const uint32_t post_slot_id = shared_memory_buffer_.Get()->last_written_buffer.load(std::memory_order_acquire);
+  return candidate.pre_slot_packed == post_slot_packed && !detail::IsWriting(post_slot_packed) &&
+         detail::GetSequence(post_slot_packed) != detail::kNoCompletedMonitorSequence &&
+         post_slot_id == candidate.raw_slot_id;
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double timeout_sec, MonitorReadMode read_mode,
                                                                          const uint32_t minimum_sequence)
     -> std::optional<Snapshot> {
@@ -66,81 +159,36 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
 
   while (attempts++ < kMaxValidationAttempts && streaming_control_.get().IsRunning()) {
     const uint32_t initial_packed = shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
-    if (detail::IsWriting(initial_packed)) {
-      if (read_mode == MonitorReadMode::SkipIfBusy) {
-        SPDLOG_DEBUG("Monitor: Skipping read because producer write is already active");
-        return std::nullopt;
-      }
-      if (read_mode == MonitorReadMode::WaitForStableSnapshot) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now >= deadline) {
-          return std::nullopt;
-        }
-        const auto remaining = deadline - now;
-        const timespec timeout = detail::DurationToTimespec(remaining);
-        const auto wait_result = detail::GetDefaultFutex()->Wait(shared_memory_buffer_.Get()->sequence_and_writing,
-                                                                 initial_packed, &timeout);
-        if (wait_result != detail::WaitResult::Success) {
-          SPDLOG_DEBUG("Monitor: Wait returned {} while waiting for producer to finish writing",
-                       static_cast<int>(wait_result));
-          return std::nullopt;
-        }
-        continue;
-      }
-    }
-
-    const uint32_t raw_slot_id = shared_memory_buffer_.Get()->last_written_buffer.load(std::memory_order_acquire);
-    if (!detail::IsValidBufferSlotId(raw_slot_id)) {
-      if (raw_slot_id != static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable))) {
-        SPDLOG_WARN("Monitor: Invalid last_written_buffer value {}", raw_slot_id);
-      }
+    const auto initial_state_action = HandleInitialState(read_mode, initial_packed, deadline);
+    if (initial_state_action == InitialStateAction::ReturnNone) {
       return std::nullopt;
     }
-    if (raw_slot_id == static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable))) {
+    if (initial_state_action == InitialStateAction::Retry) {
+      continue;
+    }
+
+    auto candidate_opt = SelectCandidateSlot(read_mode, initial_packed, deadline);
+    if (!candidate_opt.has_value()) {
       return std::nullopt;
     }
-
-    const auto slot = static_cast<detail::BufferState>(raw_slot_id);
-    const auto slot_index = detail::ToBufferIndex(slot);
-    const uint32_t pre_slot_packed =
-        gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, slot_index).load(std::memory_order_acquire);
-    if (detail::IsWriting(pre_slot_packed) ||
-        detail::GetSequence(pre_slot_packed) == detail::kNoCompletedMonitorSequence) {
-      if (read_mode == MonitorReadMode::WaitForStableSnapshot) {
-        const auto now = std::chrono::steady_clock::now();
-        if (now >= deadline) {
-          return std::nullopt;
-        }
-        const auto remaining = deadline - now;
-        const timespec timeout = detail::DurationToTimespec(remaining);
-        const auto wait_result = detail::GetDefaultFutex()->Wait(shared_memory_buffer_.Get()->sequence_and_writing,
-                                                                 initial_packed, &timeout);
-        if (wait_result != detail::WaitResult::Success) {
-          return std::nullopt;
-        }
-        continue;
-      }
-      if (read_mode == MonitorReadMode::SkipIfBusy) {
-        return std::nullopt;
-      }
+    const CandidateSlot& candidate = *candidate_opt;
+    if (candidate.raw_slot_id == static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable))) {
+      continue;
     }
 
-    *buffer_cache_ = gsl::at(shared_memory_buffer_.Get()->buffers, slot_index);
+    *buffer_cache_ = gsl::at(shared_memory_buffer_.Get()->buffers, candidate.slot_index);
 
-    const uint32_t post_slot_packed =
-        gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, slot_index).load(std::memory_order_acquire);
-    const uint32_t post_slot_id = shared_memory_buffer_.Get()->last_written_buffer.load(std::memory_order_acquire);
-
-    if (pre_slot_packed != post_slot_packed || detail::IsWriting(post_slot_packed) ||
-        detail::GetSequence(post_slot_packed) == detail::kNoCompletedMonitorSequence || post_slot_id != raw_slot_id) {
-      SPDLOG_DEBUG("Monitor: Discarding suspicious snapshot from slot {}", raw_slot_id);
+    if (!IsAcceptedSnapshot(candidate)) {
+      SPDLOG_DEBUG("Monitor: Discarding suspicious snapshot from slot {}", candidate.raw_slot_id);
       if (std::chrono::steady_clock::now() >= deadline) {
         return std::nullopt;
       }
       continue;
     }
 
-    const uint32_t accepted_sequence = detail::GetSequence(post_slot_packed);
+    const uint32_t accepted_sequence =
+        detail::GetSequence(gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, candidate.slot_index)
+                                .load(std::memory_order_acquire));
     if (accepted_sequence <= minimum_sequence) {
       return std::nullopt;
     }
@@ -164,8 +212,8 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double ti
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
-void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, double timeout_sec, uint max_iterations,
-                                                           MonitorReadMode read_mode)
+void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, double timeout_sec,
+                                                           MonitorReadMode read_mode, uint max_iterations)
   requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>
 {
   if (!shared_memory_buffer_.IsValid()) {

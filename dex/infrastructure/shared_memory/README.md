@@ -117,8 +117,8 @@ monitor.Run(
       Inspect(snapshot, sequence);
     },
     0.1,
-    0,
-    MonitorReadMode::WaitForStableSnapshot);
+    MonitorReadMode::WaitForStableSnapshot,
+    0);
 ```
 
 ## The Three Modes In Plain English

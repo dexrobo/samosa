@@ -13,6 +13,7 @@ namespace dex::shared_memory {
 namespace detail {
 
 using SequenceNumber = uint64_t;
+inline constexpr double kDefaultMonitorTimeoutSec = 0.1;
 
 // Concept for the allowed callback types
 template <typename Fn, typename Buffer>
@@ -89,19 +90,20 @@ class Monitor {
    * @return Optional reference to the latest buffer, or nullopt if no valid buffer
    */
   std::optional<std::reference_wrapper<const Buffer>> GetLatestBuffer(
-      double timeout_sec = 0.1, MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot);
+      double timeout_sec = detail::kDefaultMonitorTimeoutSec,
+      MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot);
 
   /**
    * @brief Run a monitoring loop that calls a function when new data is available
    * @param monitor_fn Function to call with new data
-   * @param writing_mode How to handle the case when producer is writing
    * @param timeout_sec Maximum time to wait for new data in seconds
    * @param max_iterations Maximum number of iterations (0 for unlimited)
+   * @param writing_mode How to handle the case when producer is writing
    *
    * TODO: Support monitor_fn with 1 argument. Current implementation only supports 2.
    */
-  void Run(auto&& monitor_fn, double timeout_sec = 0.1, uint max_iterations = 0,
-           MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot)
+  void Run(auto&& monitor_fn, double timeout_sec = detail::kDefaultMonitorTimeoutSec,
+           MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot, uint max_iterations = 0)
     requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>;
 
  private:
@@ -110,6 +112,25 @@ class Monitor {
     detail::SequenceNumber sequence;
   };
 
+  struct CandidateSlot {
+    uint32_t raw_slot_id;
+    size_t slot_index;
+    uint32_t pre_slot_packed;
+  };
+
+  enum class InitialStateAction {
+    Continue,
+    Retry,
+    ReturnNone,
+  };
+
+  [[nodiscard]] bool WaitForMonitorStateChange(uint32_t expected_packed,
+                                               const std::chrono::steady_clock::time_point& deadline) const;
+  [[nodiscard]] InitialStateAction HandleInitialState(MonitorReadMode read_mode, uint32_t initial_packed,
+                                                      const std::chrono::steady_clock::time_point& deadline) const;
+  [[nodiscard]] std::optional<CandidateSlot> SelectCandidateSlot(
+      MonitorReadMode read_mode, uint32_t initial_packed, const std::chrono::steady_clock::time_point& deadline) const;
+  [[nodiscard]] bool IsAcceptedSnapshot(const CandidateSlot& candidate) const;
   [[nodiscard]] std::optional<Snapshot> GetLatestSnapshot(
       double timeout_sec, MonitorReadMode read_mode, uint32_t minimum_sequence = detail::kNoCompletedMonitorSequence);
 

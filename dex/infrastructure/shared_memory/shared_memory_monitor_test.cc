@@ -313,7 +313,7 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallback) {
         last_sequence = sequence;
         EXPECT_EQ(std::string(buffer.data()), message);
       },
-      0.1, 4);
+      0.1, MonitorReadMode::WaitForStableSnapshot, 4);
 
   update_sequence.join();
 
@@ -379,7 +379,7 @@ TEST_F(SharedMemoryMonitorTest, RunWithCallbackFastProducerFromInit) {
           producer_sequence.store(sequence_number, std::memory_order_relaxed);
           std::this_thread::sleep_for(std::chrono::milliseconds(1));
         },
-        0.1, max_iterations);
+        0.1, MonitorReadMode::WaitForStableSnapshot, max_iterations);
   });
 
   while (!producer_started.load(std::memory_order_acquire)) {
@@ -424,7 +424,7 @@ TEST_F(SharedMemoryMonitorTest, RunStopsWhenStreamingControlStopped) {
   // Run the monitor with a callback
   monitor.Run(
       [&](const test::ArrayBuffer& /*buffer*/, uint64_t) { callback_count.fetch_add(1, std::memory_order_relaxed); },
-      0.1, 1000);
+      0.1, MonitorReadMode::WaitForStableSnapshot, 1000);
 
   stop_streaming.join();
 
@@ -467,7 +467,7 @@ TEST_F(SharedMemoryMonitorTest, RunCallsCallbackImmediatelyOnFirstFrame) {
         received_sequence = sequence;
         EXPECT_EQ(std::string(buffer.data()), message);
       },
-      0.1, 5);
+      0.1, MonitorReadMode::WaitForStableSnapshot, 5);
 
   stop_streaming.join();
 
@@ -502,7 +502,7 @@ TEST_F(SharedMemoryMonitorTest, FirstProducedFrameUsesNonEmptySequence) {
         EXPECT_EQ(std::string(buffer.data()), "first frame");
         StreamingControl::Instance().Stop();
       },
-      0.01, 1);
+      0.01, MonitorReadMode::WaitForStableSnapshot, 1);
 
   EXPECT_TRUE(callback_called.load(std::memory_order_acquire));
   EXPECT_EQ(observed_sequence, 1U);
@@ -528,7 +528,7 @@ TEST_F(SharedMemoryMonitorTest, CallbackSequenceMatchesAcceptedSnapshot) {
         EXPECT_EQ(std::string(buffer.data()), "accepted");
         StreamingControl::Instance().Stop();
       },
-      0.01, 1);
+      0.01, MonitorReadMode::WaitForStableSnapshot, 1);
 
   EXPECT_EQ(observed_sequence, 7U);
 }

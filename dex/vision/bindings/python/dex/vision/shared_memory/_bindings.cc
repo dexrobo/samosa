@@ -19,6 +19,12 @@
 
 namespace nb = nanobind;
 
+namespace {
+
+constexpr double kDefaultMonitorTimeoutSec = dex::shared_memory::detail::kDefaultMonitorTimeoutSec;
+
+}
+
 NB_MODULE(shared_memory_bindings, module_handle) {
   module_handle.attr("MAX_WIDTH") = dex::camera::kMaxWidth;
   module_handle.attr("MAX_HEIGHT") = dex::camera::kMaxHeight;
@@ -185,7 +191,8 @@ NB_MODULE(shared_memory_bindings, module_handle) {
             std::memcpy(result.get(), &latest->get(), sizeof(CameraBuffer));
             return result.release();
           },
-          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(), nb::arg("timeout_sec") = 0.1,
+          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(),
+          nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
           nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot)
       .def(
           "read_into",
@@ -198,7 +205,7 @@ NB_MODULE(shared_memory_bindings, module_handle) {
             std::memcpy(&dst, &latest->get(), sizeof(CameraBuffer));
             return true;
           },
-          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = 0.1,
+          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
           nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot);
 }
 
