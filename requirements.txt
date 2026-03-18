@@ -13,6 +13,7 @@ attrs==25.1.0
 Pillow==11.1.0
 pyarrow==19.0.1
 typing-extensions==4.12.2
+psutil==7.0.0
 
 # Project Tooling
 mypy==1.15.0

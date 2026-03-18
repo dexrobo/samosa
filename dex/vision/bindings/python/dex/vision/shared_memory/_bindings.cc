@@ -17,7 +17,7 @@
 
 namespace nb = nanobind;
 
-NB_MODULE(shared_memory_camera_bindings, module_handle) {
+NB_MODULE(shared_memory_bindings, module_handle) {
   nb::class_<dex::shared_memory::StreamingControl>(module_handle, "StreamingControl")
       .def_static("instance", &dex::shared_memory::StreamingControl::Instance, nb::rv_policy::reference)
       .def("is_running", &dex::shared_memory::StreamingControl::IsRunning)
@@ -61,13 +61,15 @@ NB_MODULE(shared_memory_camera_bindings, module_handle) {
     return shm.IsValid();
   });
 
+  module_handle.def("destroy_shared_memory", [](const std::string& name) { return ShmBuffer::Destroy(name); });
+
   nb::class_<dex::shared_memory::Producer<CameraBuffer>>(module_handle, "Producer")
       .def(nb::init<const std::string&>())
       .def("is_valid", &dex::shared_memory::Producer<CameraBuffer>::IsValid)
       .def("write", [](dex::shared_memory::Producer<CameraBuffer>& producer, const CameraBuffer& src) {
         // Use ProduceFrame instead of Run to avoid the infinite loop
         producer.ProduceFrame(src.frame_id, [&](CameraBuffer& dst, uint32_t) { std::memcpy(&dst, &src, sizeof(CameraBuffer)); });
-      });
+      }, nb::call_guard<nb::gil_scoped_release>());
 
   nb::class_<dex::shared_memory::Consumer<CameraBuffer>>(module_handle, "Consumer")
       .def(nb::init<const std::string&>())
@@ -79,8 +81,7 @@ NB_MODULE(shared_memory_camera_bindings, module_handle) {
             // Using take_ownership policy so nanobind manages the lifecycle.
             auto result = std::make_unique<CameraBuffer>();
             bool found = false;
-            constexpr int64_t kTimeoutNanos = 10000000;  // 10ms
-            const timespec timeout = {.tv_sec = 0, .tv_nsec = kTimeoutNanos};
+            const timespec timeout = {.tv_sec = 1, .tv_nsec = 0};
             auto res = consumer.ConsumeFrame(
                 frame_id,
                 [&](const CameraBuffer& src) {
@@ -93,6 +94,6 @@ NB_MODULE(shared_memory_camera_bindings, module_handle) {
             }
             return nullptr;
           },
-          nb::rv_policy::take_ownership, nb::arg("frame_id") = 0);
+          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(), nb::arg("frame_id") = 0);
 }
 

@@ -7,7 +7,8 @@ import time
 import numpy as np
 import rerun as rr
 
-from dex.vision.examples.shared_memory_camera import shared_memory_camera_bindings as shm
+import dex.vision.shared_memory as shm
+
 
 
 def main() -> None:

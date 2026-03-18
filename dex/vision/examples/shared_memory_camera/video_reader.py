@@ -7,7 +7,8 @@ import time
 import cv2
 import numpy as np
 
-from dex.vision.examples.shared_memory_camera import shared_memory_camera_bindings as shm
+import dex.vision.shared_memory as shm
+
 
 # Constants matching C++ dex::camera
 MAX_WIDTH = 1920
