@@ -10,7 +10,7 @@ This example demonstrates how to use the `dex/infrastructure/shared_memory` libr
 
 ### Python Applications
 3. **Video Reader (`video_reader.py`)**: A publisher that reads a video file from disk (using OpenCV) and streams it to shared memory at a specific framerate.
-4. **Rerun Monitor (`rerun_monitor.py`)**: A monitor application that reads frames from shared memory and visualizes them in real-time using [rerun.io](https://rerun.io/).
+4. **Rerun Monitor (`camera_reader.py`)**: A monitor application that reads frames from shared memory and visualizes them in real-time using [rerun.io](https://rerun.io/).
 
 ## Data Structure
 
@@ -48,7 +48,7 @@ bazel run //dex/vision/examples/shared_memory_camera:video_reader -- path/to/you
 
 Run the rerun monitor:
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- my_video_stream
+bazel run //dex/vision/examples/shared_memory_camera:camera_reader -- my_video_stream
 ```
 
 ### Option C: Cross-Language Stream
@@ -63,7 +63,7 @@ Generate synthetic data in C++ and visualize it in Python (Rerun).
     ```
 * **Start Python Consumer**:
     ```bash
-    bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- cross_lang_1
+    bazel run //dex/vision/examples/shared_memory_camera:camera_reader -- cross_lang_1
     ```
 
 #### 2. Python Producer -> C++ Consumer

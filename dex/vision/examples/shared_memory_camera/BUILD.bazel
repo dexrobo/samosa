@@ -32,8 +32,8 @@ py_binary(
 )
 
 py_binary(
-    name = "rerun_monitor",
-    srcs = ["rerun_monitor.py"],
+    name = "camera_reader",
+    srcs = ["camera_reader.py"],
     deps = [
         "//dex/vision/bindings/python:shared_memory",
         "@python_deps//numpy",

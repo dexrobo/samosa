@@ -1,4 +1,4 @@
-"""Consume video frames from shared memory and log to Rerun."""
+"""Consume video frames from shared memory and log diagnostics (and optionally Rerun)."""
 
 import argparse
 import logging
@@ -11,11 +11,16 @@ import numpy as np
 
 try:
     import rerun as rr
+
+    HAS_RERUN = True
 except ImportError:
     try:
         from rerun_sdk import rerun as rr
+
+        HAS_RERUN = True
     except ImportError:
         # Path hack for some Bazel layouts
+        HAS_RERUN = False
         for p in sys.path:
             rerun_sdk_path = Path(p) / "rerun_sdk"
             if rerun_sdk_path.exists():
@@ -24,22 +29,34 @@ except ImportError:
                 rerun_cli_path = rerun_sdk_path / "rerun_cli"
                 if rerun_cli_path.exists():
                     os.environ["PATH"] += os.pathsep + str(rerun_cli_path)
+                try:
+                    import rerun as rr
+
+                    HAS_RERUN = True
+                except ImportError:
+                    pass
                 break
-        import rerun as rr
 
 import dex.vision.shared_memory as shm
 
 
 def main() -> None:
-    """Run the rerun monitor application."""
-    parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log to Rerun")
+    """Run the camera reader application."""
+    parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log diagnostics")
     parser.add_argument("shm_name", type=str, help="Name of shared memory segment")
+    parser.add_argument("--no-rerun", action="store_true", help="Disable Rerun visualization")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("rerun_monitor")
+    logger = logging.getLogger("camera_reader")
 
-    rr.init("shared_memory_monitor", spawn=True)
+    use_rerun = HAS_RERUN and not args.no_rerun
+    if use_rerun:
+        try:
+            rr.init("shared_memory_reader", spawn=True)
+        except Exception as e:
+            logger.warning("Failed to initialize Rerun (is DISPLAY set?): %s. Continuing without Rerun.", e)
+            use_rerun = False
 
     consumer = shm.Consumer(args.shm_name)
     if not consumer.is_valid():
@@ -47,6 +64,10 @@ def main() -> None:
         return
 
     logger.info("Monitoring shared memory '%s'...", args.shm_name)
+    if use_rerun:
+        logger.info("Rerun visualization is ENABLED")
+    else:
+        logger.info("Rerun visualization is DISABLED")
 
     last_frame_id = -1
     diag_interval = 5.0  # seconds
@@ -76,25 +97,25 @@ def main() -> None:
             time.sleep(0.001)
             continue
 
-        now_ns = time.time_ns()
+        # Use monotonic clock to match C++ steady_clock
+        now_ns = time.monotonic_ns()
         last_frame_id = frame_buffer.frame_id
         diag_frame_count += 1
         diag_total_latency_ms += (now_ns - frame_buffer.timestamp_nanos) / 1e6
 
-        # Extract image data
-        w = frame_buffer.color_width
-        h = frame_buffer.color_height
-        size = frame_buffer.color_image_size
+        if use_rerun:
+            # Extract image data
+            w = frame_buffer.color_width
+            h = frame_buffer.color_height
+            size = frame_buffer.color_image_size
 
-        # Get image data as numpy array
-        # Note: color_image_bytes returns a nb.ndarray view of the whole buffer
-        # We need to slice it to the actual image size and reshape it.
-        raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
-        image = raw_data.reshape((h, w, 3))
+            # Get image data as numpy array
+            raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
+            image = raw_data.reshape((h, w, 3))
 
-        # Log to rerun
-        rr.set_time_nanos("camera_time", frame_buffer.timestamp_nanos)
-        rr.log("camera/image", rr.Image(image))
+            # Log to rerun
+            rr.set_time_seconds("camera_time", 1e-9 * frame_buffer.timestamp_nanos)
+            rr.log("camera/image", rr.Image(image))
 
         # Periodic diagnostics
         now = time.time()
