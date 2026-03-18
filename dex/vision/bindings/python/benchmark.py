@@ -124,6 +124,12 @@ def run_consumer(
             logger.info("[Consumer] Stream stopped (status: %s)", status)
             break
 
+        if done_event.is_set() and received_count > 0:
+            # Drain any remaining frames
+            time.sleep(0.1)
+            if consumer.read_into(frame) != shm.RunResult.Success:
+                break
+
     # Calculate peak memory usage for this process
     process = psutil.Process()
     peak_rss_mb = process.memory_info().rss / (1024 * 1024)
