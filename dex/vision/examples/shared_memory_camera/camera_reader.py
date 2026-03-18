@@ -56,20 +56,22 @@ def log_to_rerun(frame_buffer: shm.CameraFrameBuffer) -> None:
     rr.log("camera/image", rr.Image(image))
 
 
-def main() -> None:
-    """Run the camera reader application."""
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Consume video frames from shared memory and log diagnostics")
     parser.add_argument("shm_name", type=str, help="Name of shared memory segment")
     parser.add_argument("--no-rerun", action="store_true", help="Disable Rerun visualization")
-    args = parser.parse_args()
+    return parser.parse_args()
 
+
+def main() -> None:
+    """Run the camera reader application."""
+    args = parse_args()
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger("camera_reader")
 
     use_rerun = HAS_RERUN and not args.no_rerun
     if use_rerun:
-        # We catch any initialization error (e.g. DISPLAY missing) to fallback gracefully
-        # NOTE: rr.init() doesn't return bool, it just works or raises
         try:
             rr.init("shared_memory_reader", spawn=True)
         except Exception:  # noqa: BLE001
@@ -94,21 +96,13 @@ def main() -> None:
         status, frame_buffer = consumer.read()
         if status != shm.RunResult.Success:
             if status == shm.RunResult.Timeout:
-                # If the underlying C++ control was stopped due to timeout, reset it so we can keep waiting
                 shm.StreamingControl.instance().reset()
                 time.sleep(0.001)
                 continue
-
             logger.info("Consumer stopped with status: %s", status)
             break
 
-        if frame_buffer is None:
-            # Should not happen if status is Success
-            time.sleep(0.001)
-            continue
-
-        if frame_buffer.frame_id == last_frame_id:
-            # Skip if no new frame
+        if frame_buffer is None or frame_buffer.frame_id == last_frame_id:
             time.sleep(0.001)
             continue
 
@@ -121,7 +115,6 @@ def main() -> None:
         if use_rerun:
             log_to_rerun(frame_buffer)
 
-        # Periodic diagnostics
         now = time.time()
         if now - diag_start_time >= diag_interval:
             avg_fps = diag_frame_count / (now - diag_start_time)
@@ -132,10 +125,7 @@ def main() -> None:
                 avg_latency,
                 last_frame_id,
             )
-            # Reset counters
-            diag_start_time = now
-            diag_frame_count = 0
-            diag_total_latency_ms = 0.0
+            diag_start_time, diag_frame_count, diag_total_latency_ms = now, 0, 0.0
 
 
 if __name__ == "__main__":
