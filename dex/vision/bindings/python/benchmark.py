@@ -1,6 +1,7 @@
 """Benchmark for shared memory camera Python bindings using multiprocessing."""
 
 import argparse
+import contextlib
 import logging
 import multiprocessing
 import multiprocessing.queues
@@ -123,12 +124,6 @@ def run_consumer(
             logger.info("[Consumer] Stream stopped (status: %s)", status)
             break
 
-        if done_event.is_set() and received_count > 0:
-            # Drain any remaining frames
-            time.sleep(0.1)
-            if consumer.read_into(frame) != shm.RunResult.Success:
-                break
-
     # Calculate peak memory usage for this process
     process = psutil.Process()
     peak_rss_mb = process.memory_info().rss / (1024 * 1024)
@@ -163,7 +158,7 @@ def run_consumer(
 
 
 def track_memory(pid_list: list[int], stop_event: threading.Event, interval: float = 0.1) -> MemorySummary:
-    """Track combined memory usage across specified processes."""
+    """Track combined memory usage across specified processes over time."""
     initial_rss_mb = 0.0
     final_rss_mb = 0.0
     peak_rss_mb = 0.0
@@ -232,7 +227,7 @@ def print_stats(
 
 
 def main() -> None:
-    """Main entry point for the benchmark."""
+    """Run the benchmark for shared memory camera bindings."""
     parser = argparse.ArgumentParser(description="Benchmark shared memory camera bindings.")
     parser.add_argument("--shm_name", type=str, default="shm_benchmark", help="Shared memory segment name.")
     parser.add_argument("--frequency", type=float, default=120.0, help="Producer frequency in Hz.")
@@ -294,7 +289,7 @@ def main() -> None:
         else:
             logger.error("Benchmark failed: Insufficient data received.")
     except multiprocessing.queues.Empty:
-        logger.error("Benchmark failed: Result queue empty.")
+        logger.exception("Benchmark failed: Result queue empty.")
 
     shm.destroy_shared_memory(args.shm_name)
 
