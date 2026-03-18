@@ -82,10 +82,11 @@ def init_rerun(args: argparse.Namespace, logger: logging.Logger) -> bool:
         else:
             logger.info("Rerun: Spawning local viewer...")
             rr.spawn()
-        return True
     except Exception as e:  # noqa: BLE001
         logger.warning("Failed to initialize Rerun: %s. Continuing in diagnostic mode.", e)
         return False
+    else:
+        return True
 
 
 def main() -> None:
