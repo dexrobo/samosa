@@ -51,18 +51,32 @@ Run the rerun monitor:
 bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- my_video_stream
 ```
 
-### Option C: Cross-Language Stream (C++ to Python)
-This demonstrates the core interoperability of Samosa. We use the C++ mock driver to generate data and the Python Rerun monitor to visualize it.
+### Option C: Cross-Language Stream
+This demonstrates the core interoperability of Samosa. The shared memory segments and lock-free protocol are identical across languages.
 
-1. **Start the C++ Producer**:
-   ```bash
-   bazel run //dex/vision/examples/shared_memory_camera:camera_driver -- cross_lang_stream 60
-   ```
+#### 1. C++ Producer -> Python Consumer
+Generate synthetic data in C++ and visualize it in Python (Rerun).
 
-2. **Start the Python Consumer**:
-   ```bash
-   bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- cross_lang_stream
-   ```
+*   **Start C++ Producer**:
+    ```bash
+    bazel run //dex/vision/examples/shared_memory_camera:camera_driver -- cross_lang_1 60
+    ```
+*   **Start Python Consumer**:
+    ```bash
+    bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- cross_lang_1
+    ```
+
+#### 2. Python Producer -> C++ Consumer
+Read a video file in Python and monitor the end-to-end latency in C++.
+
+*   **Start Python Producer**:
+    ```bash
+    bazel run //dex/vision/examples/shared_memory_camera:video_reader -- path/to/video.mp4 cross_lang_2
+    ```
+*   **Start C++ Consumer**:
+    ```bash
+    bazel run //dex/vision/examples/shared_memory_camera:camera_consumer -- cross_lang_2
+    ```
 
 ## Python Bindings
 
