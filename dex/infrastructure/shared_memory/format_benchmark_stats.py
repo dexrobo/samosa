@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Format benchmark statistics from detailed per-frame CSV measurements."""
 
+import argparse
 import csv
 import json
 import logging
@@ -210,8 +211,6 @@ def format_benchmark_stats(input_file: str, output_json: str | None = None) -> N
 
 def main() -> None:
     """Run the benchmark statistics formatter."""
-    import argparse
-
     parser = argparse.ArgumentParser(description="Format benchmark statistics from per-frame measurements")
     parser.add_argument("input_file", help="Input CSV file with per-frame measurements")
     parser.add_argument("--output_json", help="Path to save the summary statistics as a JSON file")
