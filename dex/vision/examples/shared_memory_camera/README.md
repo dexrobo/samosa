@@ -51,6 +51,19 @@ Run the rerun monitor:
 bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- my_video_stream
 ```
 
+### Option C: Cross-Language Stream (C++ to Python)
+This demonstrates the core interoperability of Samosa. We use the C++ mock driver to generate data and the Python Rerun monitor to visualize it.
+
+1. **Start the C++ Producer**:
+   ```bash
+   bazel run //dex/vision/examples/shared_memory_camera:camera_driver -- cross_lang_stream 60
+   ```
+
+2. **Start the Python Consumer**:
+   ```bash
+   bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- cross_lang_stream
+   ```
+
 ## Python Bindings
 
 The Python applications use the production bindings located in `//dex/vision/bindings/python`. These bindings provide zero-copy access to the raw image buffers using NumPy.
