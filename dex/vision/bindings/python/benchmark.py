@@ -114,6 +114,9 @@ def run_consumer(
 
             if received_count % 100 == 0:
                 logger.info("[Consumer] Received %d frames...", received_count)
+        elif not shm.StreamingControl.instance().is_running():
+            logger.warning("[Consumer] Streaming control stopped.")
+            break
 
         if done_event.is_set() and received_count > 0:
             # Check if any more frames are coming, otherwise break
@@ -241,9 +244,11 @@ def main() -> None:
 
     result_queue: multiprocessing.Queue = multiprocessing.Queue()
     done_event = multiprocessing.Event()
-    p_prod = multiprocessing.Process(target=run_producer, args=(args.shm_name, args.frequency, args.frames, done_event))
+    p_prod = multiprocessing.Process(
+        target=run_producer, args=(args.shm_name, args.frequency, args.frames, done_event), daemon=True
+    )
     p_cons = multiprocessing.Process(
-        target=run_consumer, args=(args.shm_name, args.frames, args.warmup, result_queue, done_event)
+        target=run_consumer, args=(args.shm_name, args.frames, args.warmup, result_queue, done_event), daemon=True
     )
 
     logger.info("Starting Benchmark: %.1fHz, %d frames", args.frequency, args.frames)
