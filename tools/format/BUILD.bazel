@@ -10,7 +10,7 @@ genrule(
         "//conditions:default": ["@ruff_amd64//file"],
     }),
     outs = ["ruff_executable"],
-    cmd = "MEMBER=$$(tar -tf $< | grep '/ruff$$') && tar -xzf $< --to-stdout $$MEMBER > $@",
+    cmd = "MEMBER=$$(tar -tf $< | grep '/ruff$$' | head -n 1) && tar -xzf $< --to-stdout $$MEMBER > $@",
     executable = True,
 )
 
