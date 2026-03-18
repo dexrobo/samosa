@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     libxml2 \
+    libglib2.0-0 \
     sudo \
     && ARCH=$(dpkg --print-architecture) && \
     curl -Lo /usr/local/bin/bazel "https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-${ARCH}" && \

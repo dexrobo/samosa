@@ -9,7 +9,6 @@ user.bazelrc
 .clwb
 .idea
 .vscode
-/.devcontainer/
 .venv
 *.venv
 __pycache__
