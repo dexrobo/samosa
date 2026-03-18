@@ -5,9 +5,8 @@ import logging
 import time
 
 import cv2
-import numpy as np
-
 import dex.vision.shared_memory as shm
+import numpy as np
 
 
 def main() -> None:
@@ -27,7 +26,7 @@ def main() -> None:
         return
 
     video_fps = cap.get(cv2.CAP_PROP_FPS)
-    target_fps = args.fps if args.fps else video_fps
+    target_fps = args.fps or video_fps
     frame_duration = 1.0 / target_fps
 
     logger.info("Initializing shared memory '%s'", args.shm_name)
