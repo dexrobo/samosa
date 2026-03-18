@@ -30,7 +30,7 @@ py_binary(
     deps = [
         "//dex/vision/bindings/python:shared_memory",
         "@python_deps//numpy",
-        "@python_deps//opencv_python",
+        "@python_deps//opencv_python_headless",
     ],
 )
 
