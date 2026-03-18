@@ -14,3 +14,4 @@ select = ["ALL"]
 
 [lint.per-file-ignores]
 "**/*.py" = ["INP001"]
+"**/*_test.py" = ["PLR2004", "S101"]
