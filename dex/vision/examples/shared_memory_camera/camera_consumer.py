@@ -65,7 +65,7 @@ class VisualizationWorker(threading.Thread):
                 image, timestamp_nanos = frame_data
 
                 # Update visualization timeline
-                rr.set_time(timeline="camera_time", seconds=1e-9 * timestamp_nanos)
+                rr.set_time(timeline="camera_time", timestamp=1e-9 * timestamp_nanos)
 
                 img_log = rr.Image(image)
                 if self.jpeg_quality:
@@ -112,8 +112,13 @@ def setup_visualizer(args: argparse.Namespace, logger: logging.Logger) -> bool:
                 logger.info("Rerun: Serve not found, using task-link mode")
                 rr.connect()
         elif args.connect:
-            logger.info("Rerun: Streaming to viewer at %s", args.connect)
-            rr.connect(args.connect)
+            # In Rerun 0.23.0, use connect_grpc specifically
+            if hasattr(rr, "connect_grpc"):
+                logger.info("Rerun: Streaming to viewer via gRPC at %s", args.connect)
+                rr.connect_grpc(args.connect)
+            else:
+                logger.info("Rerun: Streaming to viewer at %s", args.connect)
+                rr.connect(args.connect)
         else:
             logger.info("Rerun: Launching local viewer")
             rr.spawn()
