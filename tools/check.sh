@@ -79,11 +79,11 @@ case "$PART" in
         ;;
     test-prod)
         log "Running production tests..."
-        bazel test --config=prod //... "${EXTRA_ARGS[@]+\"${EXTRA_ARGS[@]}\"}"
+        bazel test --config=prod //... "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-python)
         log "Running Python tests..."
-        bazel test //dex/vision/bindings/python:all "${EXTRA_ARGS[@]+\"${EXTRA_ARGS[@]}\"}"
+        bazel test //dex/vision/bindings/python:all "${EXTRA_ARGS[@]+"${EXTRA_ARGS[@]}"}"
         ;;
     test-asan)
 
