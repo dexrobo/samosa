@@ -83,7 +83,7 @@ dex::shared_memory::Consumer<Telemetry> consumer{shm_name};
 // - [](const Telemetry& buffer, uint counter)
 // - [](const Telemetry& buffer, uint counter, int buffer_id)
 consumer.Run([](const Telemetry& buffer, uint counter) {
-    std::cout << "Received snapshot " << counter 
+    std::cout << "Received snapshot " << counter
               << " at: " << buffer.timestamp_ns << std::endl;
 });
 ```
@@ -134,15 +134,34 @@ Samosa requires a Linux environment with specific kernel features (`futex`) and 
 docker build -t samosa-env .devcontainer/
 ```
 
-### 2. Launch the Container
+### 2. Setup and Reuse
+**First time (Create and Run in background):**
 ```bash
-docker run -it --rm \
+docker run -d \
     --name samosa-dev \
     --init \
     --ipc=host \
     -p 9876:9876 \
     -v $(pwd):/workspace \
-    samosa-env
+    samosa-env \
+    sleep infinity
+```
+
+**Running commands:**
+Use `docker exec` to run build or test commands without creating a new container:
+```bash
+docker exec -it samosa-dev bazel run check -- all
+```
+
+**Interactive shell:**
+```bash
+docker exec -it samosa-dev bash
+```
+
+**Subsequent times:**
+If the container is stopped (e.g. after a reboot), simply start it again:
+```bash
+docker start samosa-dev
 ```
 
 **Why these flags?**
