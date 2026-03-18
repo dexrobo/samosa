@@ -1,5 +1,6 @@
 """Tests for shared memory camera Python bindings."""
 
+import threading
 import time
 import unittest
 
@@ -78,8 +79,6 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
             for _ in range(5):
                 producer.write(write_buffer)
                 time.sleep(0.05)
-
-        import threading
 
         t_cons = threading.Thread(target=run_consumer)
         t_prod = threading.Thread(target=run_producer)
