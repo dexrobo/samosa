@@ -1,8 +1,11 @@
 load("@rules_cc//cc:defs.bzl", "cc_binary")
+load("@rules_python//python:defs.bzl", "py_binary")
+
+package(default_visibility = ["//visibility:public"])
 
 cc_binary(
-    name = "camera_driver",
-    srcs = ["camera_driver.cc"],
+    name = "camera_producer_cc",
+    srcs = ["camera_producer.cc"],
     deps = [
         "//dex/drivers/camera/base:types",
         "//dex/infrastructure/shared_memory:shared_memory_streaming",
@@ -11,11 +14,33 @@ cc_binary(
 )
 
 cc_binary(
-    name = "camera_consumer",
+    name = "camera_consumer_cc",
     srcs = ["camera_consumer.cc"],
     deps = [
         "//dex/drivers/camera/base:types",
         "//dex/infrastructure/shared_memory:shared_memory_streaming",
         "@com_github_gabime_spdlog//:spdlog",
+    ],
+)
+
+py_binary(
+    name = "video_producer_py",
+    srcs = ["video_producer.py"],
+    main = "video_producer.py",
+    deps = [
+        "//dex/vision/bindings/python:shared_memory",
+        "@python_deps//numpy",
+        "@python_deps//opencv_python_headless",
+    ],
+)
+
+py_binary(
+    name = "camera_consumer_py",
+    srcs = ["camera_consumer.py"],
+    main = "camera_consumer.py",
+    deps = [
+        "//dex/vision/bindings/python:shared_memory",
+        "@python_deps//numpy",
+        "@python_deps//rerun_sdk",
     ],
 )
