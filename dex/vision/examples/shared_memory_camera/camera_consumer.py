@@ -1,6 +1,7 @@
 """Consume video frames from shared memory and log diagnostics (and optionally Rerun)."""
 
 import argparse
+import contextlib
 import logging
 import os
 import queue
@@ -45,13 +46,15 @@ import dex.vision.shared_memory as shm
 class RerunThread(threading.Thread):
     """Separate thread for Rerun logging to avoid blocking the consumer loop."""
 
-    def __init__(self, jpeg_quality: int | None = None):
+    def __init__(self, jpeg_quality: int | None = None) -> None:
+        """Initialize the Rerun logging thread."""
         super().__init__(daemon=True)
-        self.queue = queue.Queue(maxsize=2)  # Keep queue small to prioritize latest data
+        self.queue: queue.Queue = queue.Queue(maxsize=2)  # Keep queue small to prioritize latest data
         self.running = True
         self.jpeg_quality = jpeg_quality
 
     def run(self) -> None:
+        """Continuously log frames from the queue to Rerun."""
         while self.running:
             try:
                 frame_data = self.queue.get(timeout=0.1)
@@ -70,10 +73,11 @@ class RerunThread(threading.Thread):
                 rr.log("camera/image", img_log)
             except queue.Empty:
                 continue
-            except Exception as e:
-                logging.getLogger("camera_consumer_py").error("Rerun thread error: %s", e)
+            except Exception:  # noqa: BLE001
+                logging.getLogger("camera_consumer_py").exception("Rerun thread error")
 
     def stop(self) -> None:
+        """Stop the Rerun logging thread."""
         self.running = False
 
 
@@ -111,6 +115,25 @@ def init_rerun(args: argparse.Namespace, logger: logging.Logger) -> bool:
         return True
 
 
+def process_frame(frame_buffer: shm.CameraFrameBuffer, rerun_worker: RerunThread | None) -> None:
+    """Process a single frame and optionally send it to the Rerun worker."""
+    if not rerun_worker:
+        return
+
+    # Extract image data
+    w = frame_buffer.color_width
+    h = frame_buffer.color_height
+    size = frame_buffer.color_image_size
+
+    # Get image data as numpy array (zero-copy view)
+    raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
+    image = raw_data.reshape((h, w, 3)).copy()  # Must copy for thread safety
+
+    # Non-blocking put to avoid slowing down consumer
+    with contextlib.suppress(queue.Full):
+        rerun_worker.queue.put_nowait((image, frame_buffer.timestamp_nanos))
+
+
 def main() -> None:
     """Run the camera consumer_py application."""
     args = parse_args()
@@ -118,9 +141,8 @@ def main() -> None:
     logger = logging.getLogger("camera_consumer_py")
 
     use_rerun = init_rerun(args, logger)
-    rerun_worker = None
-    if use_rerun:
-        rerun_worker = RerunThread(jpeg_quality=args.compress)
+    rerun_worker = RerunThread(jpeg_quality=args.compress) if use_rerun else None
+    if rerun_worker:
         rerun_worker.start()
 
     consumer = shm.Consumer(args.shm_name)
@@ -133,10 +155,8 @@ def main() -> None:
 
     frame_buffer = shm.CameraFrameBuffer()
     last_frame_id = -1
-    diag_interval = 5.0  # seconds
-    diag_start_time = time.time()
-    diag_frame_count = 0
-    diag_total_latency_ms = 0.0
+    diag_interval, diag_start_time = 5.0, time.time()
+    diag_frame_count, diag_total_latency_ms = 0, 0.0
 
     try:
         while True:
@@ -153,29 +173,13 @@ def main() -> None:
                 time.sleep(0.001)
                 continue
 
-            # Performance: Use monotonic clock for metrics
             now_ns = time.monotonic_ns()
             last_frame_id = frame_buffer.frame_id
             diag_frame_count += 1
             diag_total_latency_ms += (now_ns - frame_buffer.timestamp_nanos) / 1e6
 
-            if use_rerun and rerun_worker:
-                # Extract image data
-                w = frame_buffer.color_width
-                h = frame_buffer.color_height
-                size = frame_buffer.color_image_size
+            process_frame(frame_buffer, rerun_worker)
 
-                # Get image data as numpy array (zero-copy view)
-                raw_data = np.array(frame_buffer.color_image_bytes[:size], copy=False)
-                image = raw_data.reshape((h, w, 3)).copy()  # Must copy for thread safety
-
-                try:
-                    # Non-blocking put to avoid slowing down consumer
-                    rerun_worker.queue.put_nowait((image, frame_buffer.timestamp_nanos))
-                except queue.Full:
-                    pass  # Skip if worker is busy
-
-            # Periodic diagnostics
             now = time.time()
             if now - diag_start_time >= diag_interval:
                 avg_fps = diag_frame_count / (now - diag_start_time)
@@ -187,7 +191,6 @@ def main() -> None:
                     last_frame_id,
                 )
                 diag_start_time, diag_frame_count, diag_total_latency_ms = now, 0, 0.0
-
     except KeyboardInterrupt:
         logger.info("Shutdown requested via ^C")
     finally:
