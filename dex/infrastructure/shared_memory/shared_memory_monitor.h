@@ -125,3 +125,4 @@ class Monitor {
 #include "dex/infrastructure/shared_memory/shared_memory_monitor_impl.h"
 
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
+

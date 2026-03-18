@@ -201,3 +201,4 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = 0.1,
           nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot);
 }
+
