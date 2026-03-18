@@ -74,11 +74,17 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
 void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::Run(auto&& produce)
   requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>
 {
-  uint counter = 0;
   while (streaming_control_.get().IsRunning()) {
-    ProduceFrame(counter, produce);
-    ++counter;
+    ProduceSingle(produce);
   }
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, StreamingSharedMemoryBuffer>
+void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceSingle(auto&& produce)
+  requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>
+{
+  ProduceFrame(current_frame_count_++, produce);
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
@@ -196,17 +202,24 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::Run(auto&&
   }
   SPDLOG_DEBUG("producer has reset. begin consuming...");
 
-  uint counter = 0;
   while (streaming_control_.get().IsRunning()) {
-    SPDLOG_DEBUG("[{}, {}] pre-capture: ", counter, counter);
-    const auto result = ConsumeFrame(counter, consume, timeout);
+    SPDLOG_DEBUG("[{}, {}] pre-capture: ", current_frame_count_, current_frame_count_);
+    const auto result = ConsumeSingle(consume, timeout);
     if (result != RunResult::Success) {
       return result;
     }
-    SPDLOG_DEBUG("[{}, {}] post-capture: ", counter, counter);
-    ++counter;
+    SPDLOG_DEBUG("[{}, {}] post-capture: ", current_frame_count_ - 1, current_frame_count_ - 1);
   }
   return RunResult::Stopped;
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, StreamingSharedMemoryBuffer>
+RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeSingle(auto&& consume,
+                                                                                    const timespec* timeout)
+  requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume)>, Buffer>
+{
+  return ConsumeFrame(current_frame_count_++, consume, timeout);
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename StreamingSharedMemoryBuffer>

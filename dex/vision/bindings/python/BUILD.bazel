@@ -1,0 +1,48 @@
+load("@nanobind_bazel//:build_defs.bzl", "nanobind_extension")
+load("@rules_python//python:defs.bzl", "py_binary", "py_library", "py_test")
+
+package(default_visibility = ["//visibility:public"])
+
+nanobind_extension(
+    name = "shared_memory_bindings",
+    srcs = ["dex/vision/shared_memory/_bindings.cc"],
+    deps = [
+        "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_streaming",
+    ],
+)
+
+py_library(
+    name = "shared_memory",
+    srcs = ["dex/vision/shared_memory/__init__.py"],
+    data = [":shared_memory_bindings.so"],
+    imports = ["."],
+)
+
+py_test(
+    name = "shared_memory_bindings_test",
+    srcs = ["bindings_test.py"],
+    main = "bindings_test.py",
+    target_compatible_with = select({
+        "//:asan_config": ["@platforms//:incompatible"],
+        "//:asan_dynamic_config": ["@platforms//:incompatible"],
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//:ubsan_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":shared_memory",
+        "@python_deps//numpy",
+    ],
+)
+
+py_binary(
+    name = "shared_memory_benchmark",
+    srcs = ["benchmark.py"],
+    main = "benchmark.py",
+    deps = [
+        ":shared_memory",
+        "@python_deps//psutil",
+    ],
+)
