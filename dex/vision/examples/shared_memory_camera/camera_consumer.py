@@ -73,7 +73,7 @@ class RerunThread(threading.Thread):
                 rr.log("camera/image", img_log)
             except queue.Empty:
                 continue
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logging.getLogger("camera_consumer_py").exception("Rerun thread error")
 
     def stop(self) -> None:
