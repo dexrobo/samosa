@@ -35,15 +35,6 @@ py_binary(
 )
 
 py_binary(
-    name = "debug_serve",
-    srcs = ["debug_serve.py"],
-    main = "debug_serve.py",
-    deps = [
-        "@python_deps//rerun_sdk",
-    ],
-)
-
-py_binary(
     name = "camera_consumer_py",
     srcs = ["camera_consumer.py"],
     main = "camera_consumer.py",
