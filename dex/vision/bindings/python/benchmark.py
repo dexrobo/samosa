@@ -46,7 +46,7 @@ def run_producer(shm_name: str, frequency: float, num_frames: int, done_event: m
 
     producer = shm.Producer(shm_name)
     if not producer.is_valid():
-        logger.error("[Producer] Failed to connect")
+        logger.error("[Producer] Connection failed.")
         done_event.set()
         return
 
@@ -56,12 +56,12 @@ def run_producer(shm_name: str, frequency: float, num_frames: int, done_event: m
     frame.color_image_size = 1920 * 1080 * 3
 
     period = 1.0 / frequency
-    logger.info("[Producer] Starting at %.1fHz", frequency)
+    logger.info("[Producer] Starting stream (%.1fHz)...", frequency)
 
     for i in range(num_frames):
         start = time.perf_counter()
         frame.frame_id = i
-        frame.timestamp_nanos = time.time_ns()
+        frame.timestamp_nanos = time.monotonic_ns()
 
         producer.write(frame)
 
@@ -69,15 +69,14 @@ def run_producer(shm_name: str, frequency: float, num_frames: int, done_event: m
         if elapsed < period:
             time.sleep(period - elapsed)
 
-    logger.info("[Producer] Finished main frames, pulsing to wake consumer")
-    # Send a few more pulses to ensure consumer wakes up if it was waiting
+    # Final pulses to ensure consumer is not blocked on a wait
     for i in range(5):
         frame.frame_id = num_frames + i
         producer.write(frame)
         time.sleep(0.1)
 
     done_event.set()
-    logger.info("[Producer] Finished")
+    logger.info("[Producer] Stream complete.")
 
 
 def run_consumer(
@@ -93,13 +92,13 @@ def run_consumer(
 
     consumer = shm.Consumer(shm_name)
     if not consumer.is_valid():
-        logger.error("[Consumer] Failed to connect")
+        logger.error("[Consumer] Connection failed.")
         return
 
     latencies_ms = []
     timestamps = []
 
-    logger.info("[Consumer] Running until Producer finishes or %d received...", num_frames)
+    logger.info("[Consumer] Monitoring stream (%d frames)...", num_frames)
 
     frame = shm.CameraFrameBuffer()
     received_count = 0
@@ -107,25 +106,25 @@ def run_consumer(
         # 1s timeout in C++
         status = consumer.read_into(frame)
         if status == shm.RunResult.Success:
-            now_ns = time.time_ns()
+            now_ns = time.monotonic_ns()
             latency_ms = (now_ns - frame.timestamp_nanos) / 1e6
             latencies_ms.append(latency_ms)
             timestamps.append(now_ns / 1e9)
             received_count += 1
 
-            if received_count % 100 == 0:
-                logger.info("[Consumer] Received %d frames...", received_count)
+            if received_count % 500 == 0:
+                logger.info("[Consumer] Processed %d frames...", received_count)
         elif status == shm.RunResult.Timeout:
             if done_event.is_set():
                 break
             # Reset so we can wait again if the system is still theoretically running
             shm.StreamingControl.instance().reset()
         else:
-            logger.warning("[Consumer] Exiting loop with status: %s", status)
+            logger.info("[Consumer] Stream stopped (status: %s)", status)
             break
 
         if done_event.is_set() and received_count > 0:
-            # Check if any more frames are coming, otherwise break
+            # Drain any remaining frames
             time.sleep(0.1)
             if consumer.read_into(frame) != shm.RunResult.Success:
                 break
@@ -164,7 +163,7 @@ def run_consumer(
 
 
 def track_memory(pid_list: list[int], stop_event: threading.Event, interval: float = 0.1) -> MemorySummary:
-    """Track memory usage across a set of PIDs over time."""
+    """Track combined memory usage across specified processes."""
     initial_rss_mb = 0.0
     final_rss_mb = 0.0
     peak_rss_mb = 0.0
@@ -174,27 +173,23 @@ def track_memory(pid_list: list[int], stop_event: threading.Event, interval: flo
 
         # Initial sample
         for proc in processes:
-            try:
+            with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
                 initial_rss_mb += proc.memory_info().rss
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                continue
         initial_rss_mb /= 1024 * 1024
         peak_rss_mb = initial_rss_mb
 
         while not stop_event.is_set():
             current_total_rss = 0.0
             for proc in processes:
-                try:
+                with contextlib.suppress(psutil.NoSuchProcess, psutil.AccessDenied):
                     current_total_rss += proc.memory_info().rss
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    continue
             current_mb = current_total_rss / (1024 * 1024)
             peak_rss_mb = max(peak_rss_mb, current_mb)
             final_rss_mb = current_mb
             time.sleep(interval)
 
     except Exception:
-        logger.exception("Error tracking memory")
+        logger.exception("Error during memory tracking")
 
     return MemorySummary(
         initial_rss_mb=initial_rss_mb,
@@ -207,45 +202,49 @@ def track_memory(pid_list: list[int], stop_event: threading.Event, interval: flo
 def print_stats(
     stats: BenchmarkStats, warmup: int, mem_summary: MemorySummary, stable_threshold: float, leak_threshold: float
 ) -> None:
-    """Print the benchmark results."""
-    logger.info("Benchmark Results (after %d warmup frames):", warmup)
+    """Print the final benchmark results."""
+    logger.info("--- Benchmark Results (Warmup: %d frames) ---", warmup)
     logger.info("  Throughput:     %.2f FPS", stats.fps)
-    logger.info("  Min Latency:    %.3f ms", stats.min_latency)
-    logger.info("  Avg Latency:    %.3f ms", stats.avg_latency)
-    logger.info("  Median Latency: %.3f ms", stats.median_latency)
-    logger.info("  Max Latency:    %.3f ms", stats.max_latency)
-    logger.info("  P95 Latency:    %.3f ms", stats.p95_latency)
+    logger.info(
+        "  Latency (ms):   Min: %.3f | Avg: %.3f | Med: %.3f | P95: %.3f | Max: %.3f",
+        stats.min_latency,
+        stats.avg_latency,
+        stats.median_latency,
+        stats.p95_latency,
+        stats.max_latency,
+    )
     logger.info("  Total Samples:  %d", stats.count)
-    logger.info("Memory Stability Analysis:")
-    logger.info("  Initial RSS:    %.2f MB", mem_summary.initial_rss_mb)
-    logger.info("  Final RSS:      %.2f MB", mem_summary.final_rss_mb)
-    logger.info("  Peak RSS:       %.2f MB", mem_summary.peak_rss_mb)
+    logger.info("--- Memory Analysis ---")
+    logger.info(
+        "  RSS (MB):       Initial: %.2f | Final: %.2f | Peak: %.2f",
+        mem_summary.initial_rss_mb,
+        mem_summary.final_rss_mb,
+        mem_summary.peak_rss_mb,
+    )
     logger.info("  Memory Climb:   %+.2f MB", mem_summary.climb_mb)
 
     if abs(mem_summary.climb_mb) < stable_threshold:
-        logger.info("  Status:         Memory is STABLE (<%gMB climb)", stable_threshold)
+        logger.info("  Status:         Stable (<%g MB climb)", stable_threshold)
     elif mem_summary.climb_mb > leak_threshold:
-        logger.warning("  Status:         Memory is CLIMBING (>%gMB climb) - Potential Leak?", leak_threshold)
-    elif mem_summary.climb_mb < 0:
-        logger.info("  Status:         Memory DECREASED (%.2f MB) - Stabilization", mem_summary.climb_mb)
+        logger.warning("  Status:         Potential Leak (>%g MB climb)", leak_threshold)
     else:
-        logger.info("  Status:         Memory usage increased slightly (%.2f MB)", mem_summary.climb_mb)
+        logger.info("  Status:         Minor increase (%.2f MB)", mem_summary.climb_mb)
 
 
 def main() -> None:
-    """Run the benchmark."""
-    parser = argparse.ArgumentParser(description="Benchmark shared memory camera bindings")
-    parser.add_argument("--shm_name", type=str, default="shm_benchmark", help="Shared memory segment name")
-    parser.add_argument("--frequency", type=float, default=120.0, help="Producer frequency in Hz")
-    parser.add_argument("--frames", type=int, default=2000, help="Number of frames to benchmark")
-    parser.add_argument("--warmup", type=int, default=200, help="Number of warmup frames to discard")
-    parser.add_argument("--stable_threshold", type=float, default=1.0, help="Threshold (MB) to consider memory stable")
-    parser.add_argument("--leak_threshold", type=float, default=5.0, help="Threshold (MB) to consider memory leaking")
+    """Main entry point for the benchmark."""
+    parser = argparse.ArgumentParser(description="Benchmark shared memory camera bindings.")
+    parser.add_argument("--shm_name", type=str, default="shm_benchmark", help="Shared memory segment name.")
+    parser.add_argument("--frequency", type=float, default=120.0, help="Producer frequency in Hz.")
+    parser.add_argument("--frames", type=int, default=2000, help="Number of frames to benchmark.")
+    parser.add_argument("--warmup", type=int, default=200, help="Number of warmup frames to discard.")
+    parser.add_argument("--stable_threshold", type=float, default=1.0, help="MB threshold for stability.")
+    parser.add_argument("--leak_threshold", type=float, default=5.0, help="MB threshold for potential leak.")
     args = parser.parse_args()
 
     shm.destroy_shared_memory(args.shm_name)
     if not shm.initialize_shared_memory(args.shm_name):
-        logger.error("Failed to initialize shared memory")
+        logger.error("Failed to initialize shared memory.")
         return
 
     result_queue: multiprocessing.Queue = multiprocessing.Queue()
@@ -257,13 +256,12 @@ def main() -> None:
         target=run_consumer, args=(args.shm_name, args.frames, args.warmup, result_queue, done_event), daemon=True
     )
 
-    logger.info("Starting Benchmark: %.1fHz, %d frames", args.frequency, args.frames)
+    logger.info("Starting benchmark: %.1f Hz | %d frames", args.frequency, args.frames)
     p_prod.start()
     time.sleep(0.5)
     p_cons.start()
 
     memory_stop_event = threading.Event()
-    # Container to hold the summary object returned by the thread
     mem_summary_container: list[MemorySummary] = []
 
     def memory_thread_func() -> None:
@@ -283,19 +281,20 @@ def main() -> None:
     memory_stop_event.set()
     mem_thread.join()
 
-    if p_prod.is_alive():
-        p_prod.terminate()
-    if p_cons.is_alive():
-        p_cons.terminate()
+    with contextlib.suppress(Exception):
+        if p_prod.is_alive():
+            p_prod.terminate()
+        if p_cons.is_alive():
+            p_cons.terminate()
 
     try:
         stats = result_queue.get(timeout=1)
         if stats and mem_summary_container:
             print_stats(stats, args.warmup, mem_summary_container[0], args.stable_threshold, args.leak_threshold)
         else:
-            logger.error("Benchmark failed: Insufficient frames received.")
+            logger.error("Benchmark failed: Insufficient data received.")
     except multiprocessing.queues.Empty:
-        logger.exception("Benchmark failed: Result queue empty.")
+        logger.error("Benchmark failed: Result queue empty.")
 
     shm.destroy_shared_memory(args.shm_name)
 
