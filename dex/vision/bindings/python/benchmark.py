@@ -229,8 +229,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark shared memory camera bindings")
     parser.add_argument("--shm_name", type=str, default="shm_benchmark", help="Shared memory segment name")
     parser.add_argument("--frequency", type=float, default=120.0, help="Producer frequency in Hz")
-    parser.add_argument("--frames", type=int, default=1000, help="Number of frames to benchmark")
-    parser.add_argument("--warmup", type=int, default=100, help="Number of warmup frames to discard")
+    parser.add_argument("--frames", type=int, default=2000, help="Number of frames to benchmark")
+    parser.add_argument("--warmup", type=int, default=200, help="Number of warmup frames to discard")
     args = parser.parse_args()
 
     shm.destroy_shared_memory(args.shm_name)

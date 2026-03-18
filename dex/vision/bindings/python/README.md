@@ -111,7 +111,7 @@ A high-performance benchmark is included to measure throughput, latency, and mem
 
 To run the benchmark:
 ```bash
-bazel run //dex/vision/bindings/python:shared_memory_benchmark -- --frames 1000 --frequency 120 --warmup 100
+bazel run //dex/vision/bindings/python:shared_memory_benchmark -- --frames 2000 --frequency 120 --warmup 200
 ```
 
 To run the unit tests:
@@ -119,6 +119,14 @@ To run the unit tests:
 bazel test //dex/vision/bindings/python:shared_memory_bindings_test
 ```
 
+### Expected Warnings and Errors
+When running the benchmark, you may encounter the following logs which are expected behavior:
+
+1. **`FutexWait timed out` (Warning)**: This occurs at the end of the benchmark when the producer finishes and the consumer times out waiting for a new frame. It confirms the C++ timeout mechanism is working.
+2. **`shm_unlink error: Inappropriate ioctl for device` (Error)**: This is an artifact of Docker on macOS virtualization of the `/dev/shm` filesystem. The unlink operation usually succeeds despite this message.
+3. **Total Samples < (Frames - Warmup)**: Samosa uses **snapshot semantics**. If the consumer is slower than the producer (common in containerized environments), it will drop older frames to provide the most recent data. This is by design to prevent latency build-up.
+
+### Benchmark Metrics
 The benchmark reports:
 - **Throughput (FPS)**: Effective frames per second processed.
 - **Latency (Min, Avg, Median, Max, P95)**: Precise timing from producer timestamp to consumer receipt.
