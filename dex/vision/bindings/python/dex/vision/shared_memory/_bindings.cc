@@ -65,10 +65,10 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           "color_image_bytes",
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.color_image_bytes.size()};
-            return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(
-                    buffer.color_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                1, shape.data());
+            // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+            return nb::ndarray<nb::numpy, uint8_t>(reinterpret_cast<uint8_t*>(buffer.color_image_bytes.data()), 1,
+                                                   shape.data());
+            // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
             std::memcpy(buffer.color_image_bytes.data(), data.data(),
@@ -78,10 +78,10 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           "depth_image_bytes",
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.depth_image_bytes.size()};
-            return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(
-                    buffer.depth_image_bytes.data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                1, shape.data());
+            // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+            return nb::ndarray<nb::numpy, uint8_t>(reinterpret_cast<uint8_t*>(buffer.depth_image_bytes.data()), 1,
+                                                   shape.data());
+            // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
             std::memcpy(buffer.depth_image_bytes.data(), data.data(),
@@ -91,10 +91,10 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           "color_stereo_right_image_bytes",
           [](dex::camera::CameraFrameBuffer& buffer) {
             std::array<size_t, 1> shape = {buffer.color_stereo_right_image_bytes.size()};
+            // NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
             return nb::ndarray<nb::numpy, uint8_t>(
-                reinterpret_cast<uint8_t*>(buffer.color_stereo_right_image_bytes
-                                               .data()),  // NOLINT(cppcoreguidelines-pro-type-reinterpret-cast)
-                1, shape.data());
+                reinterpret_cast<uint8_t*>(buffer.color_stereo_right_image_bytes.data()), 1, shape.data());
+            // NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
             std::memcpy(buffer.color_stereo_right_image_bytes.data(), data.data(),
