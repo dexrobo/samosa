@@ -3,9 +3,12 @@
 import argparse
 import contextlib
 import logging
+import os
 import queue
+import sys
 import threading
 import time
+from pathlib import Path
 
 import numpy as np
 
@@ -14,7 +17,28 @@ try:
 
     HAS_RERUN = True
 except ImportError:
-    HAS_RERUN = False
+    try:
+        from rerun_sdk import rerun as rr
+
+        HAS_RERUN = True
+    except ImportError:
+        # Compatibility path for various environment layouts (especially Bazel)
+        HAS_RERUN = False
+        for p in sys.path:
+            rerun_sdk_path = Path(p) / "rerun_sdk"
+            if rerun_sdk_path.exists():
+                sys.path.append(str(rerun_sdk_path))
+                # Add viewer binary to PATH for spawn mode
+                rerun_cli_path = rerun_sdk_path / "rerun_cli"
+                if rerun_cli_path.exists():
+                    os.environ["PATH"] += os.pathsep + str(rerun_cli_path)
+                try:
+                    import rerun as rr
+
+                    HAS_RERUN = True
+                except ImportError:
+                    pass
+                break
 
 import dex.vision.shared_memory as shm
 
@@ -41,7 +65,7 @@ class VisualizationWorker(threading.Thread):
                 image, timestamp_nanos = frame_data
 
                 # Update visualization timeline
-                rr.set_time_seconds("camera_time", 1e-9 * timestamp_nanos)
+                rr.set_time(timeline="camera_time", seconds=1e-9 * timestamp_nanos)
 
                 img_log = rr.Image(image)
                 if self.jpeg_quality:
@@ -77,12 +101,14 @@ def setup_visualizer(args: argparse.Namespace, logger: logging.Logger) -> bool:
     try:
         rr.init("camera_consumer_py")
         if args.serve:
-            # serve() is available in newer SDKs but let's be extra safe
-            if hasattr(rr, "serve"):
-                logger.info("Rerun: Listening for viewers on 0.0.0.0:9876")
+            # In Rerun 0.23.0, use serve_grpc for native viewers
+            if hasattr(rr, "serve_grpc"):
+                logger.info("Rerun: Listening for gRPC connections on 0.0.0.0:9876")
+                rr.serve_grpc()
+            elif hasattr(rr, "serve"):
+                logger.info("Rerun: Listening for connections on 0.0.0.0:9876")
                 rr.serve()
             else:
-                # Fallback for some SDK versions/builds
                 logger.info("Rerun: Serve not found, using task-link mode")
                 rr.connect()
         elif args.connect:
