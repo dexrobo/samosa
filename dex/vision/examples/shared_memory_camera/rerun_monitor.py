@@ -2,10 +2,30 @@
 
 import argparse
 import logging
+import os
+import sys
 import time
+from pathlib import Path
 
 import numpy as np
-import rerun as rr
+
+try:
+    import rerun as rr
+except ImportError:
+    try:
+        from rerun_sdk import rerun as rr
+    except ImportError:
+        # Path hack for some Bazel layouts
+        for p in sys.path:
+            rerun_sdk_path = Path(p) / "rerun_sdk"
+            if rerun_sdk_path.exists():
+                sys.path.append(str(rerun_sdk_path))
+                # Also add rerun_cli to PATH for spawn=True
+                rerun_cli_path = rerun_sdk_path / "rerun_cli"
+                if rerun_cli_path.exists():
+                    os.environ["PATH"] += os.pathsep + str(rerun_cli_path)
+                break
+        import rerun as rr
 
 import dex.vision.shared_memory as shm
 
@@ -29,6 +49,11 @@ def main() -> None:
     logger.info("Monitoring shared memory '%s'...", args.shm_name)
 
     last_frame_id = -1
+    diag_interval = 5.0  # seconds
+    diag_start_time = time.time()
+    diag_frame_count = 0
+    diag_total_latency_ms = 0.0
+
     while True:
         status, frame_buffer = consumer.read()
         if status != shm.RunResult.Success:
@@ -51,7 +76,10 @@ def main() -> None:
             time.sleep(0.001)
             continue
 
+        now_ns = time.time_ns()
         last_frame_id = frame_buffer.frame_id
+        diag_frame_count += 1
+        diag_total_latency_ms += (now_ns - frame_buffer.timestamp_nanos) / 1e6
 
         # Extract image data
         w = frame_buffer.color_width
@@ -68,8 +96,21 @@ def main() -> None:
         rr.set_time_nanos("camera_time", frame_buffer.timestamp_nanos)
         rr.log("camera/image", rr.Image(image))
 
-        if last_frame_id % 30 == 0:
-            logger.info("Consumed frame %d", last_frame_id)
+        # Periodic diagnostics
+        now = time.time()
+        if now - diag_start_time >= diag_interval:
+            avg_fps = diag_frame_count / (now - diag_start_time)
+            avg_latency = diag_total_latency_ms / diag_frame_count if diag_frame_count > 0 else 0
+            logger.info(
+                "[Diagnostics] FPS: %.1f, Latency: %.2f ms (avg), Last ID: %d",
+                avg_fps,
+                avg_latency,
+                last_frame_id,
+            )
+            # Reset counters
+            diag_start_time = now
+            diag_frame_count = 0
+            diag_total_latency_ms = 0.0
 
 
 if __name__ == "__main__":

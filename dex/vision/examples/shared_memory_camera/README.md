@@ -57,11 +57,11 @@ This demonstrates the core interoperability of Samosa. The shared memory segment
 #### 1. C++ Producer -> Python Consumer
 Generate synthetic data in C++ and visualize it in Python (Rerun).
 
-*   **Start C++ Producer**:
+* **Start C++ Producer**:
     ```bash
     bazel run //dex/vision/examples/shared_memory_camera:camera_driver -- cross_lang_1 60
     ```
-*   **Start Python Consumer**:
+* **Start Python Consumer**:
     ```bash
     bazel run //dex/vision/examples/shared_memory_camera:rerun_monitor -- cross_lang_1
     ```
@@ -69,11 +69,11 @@ Generate synthetic data in C++ and visualize it in Python (Rerun).
 #### 2. Python Producer -> C++ Consumer
 Read a video file in Python and monitor the end-to-end latency in C++.
 
-*   **Start Python Producer**:
+* **Start Python Producer**:
     ```bash
     bazel run //dex/vision/examples/shared_memory_camera:video_reader -- path/to/video.mp4 cross_lang_2
     ```
-*   **Start C++ Consumer**:
+* **Start C++ Consumer**:
     ```bash
     bazel run //dex/vision/examples/shared_memory_camera:camera_consumer -- cross_lang_2
     ```
