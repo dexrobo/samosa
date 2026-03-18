@@ -37,9 +37,9 @@ def main() -> None:
                 shm.StreamingControl.instance().reset()
                 time.sleep(0.001)
                 continue
-            else:
-                logger.info("Consumer stopped with status: %s", status)
-                break
+
+            logger.info("Consumer stopped with status: %s", status)
+            break
 
         if frame_buffer is None:
             # Should not happen if status is Success
