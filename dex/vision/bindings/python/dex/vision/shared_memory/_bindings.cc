@@ -164,3 +164,4 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           },
           nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"));
 }
+

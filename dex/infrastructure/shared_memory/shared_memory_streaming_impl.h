@@ -51,8 +51,14 @@ bool InitializeBuffer(StreamingSharedMemoryBuffer<Buffer, buffer_size>* buffer) 
   buffer->version = detail::kSharedMemVersion;
   buffer->write_index.store(ToInt(detail::BufferState::Unavailable), std::memory_order_relaxed);
   buffer->read_index.store(ToInt(detail::BufferState::Unavailable), std::memory_order_relaxed);
+  buffer->last_written_buffer.store(ToInt(detail::BufferState::Unavailable), std::memory_order_relaxed);
   if constexpr (requires { buffer->sequence_and_writing; }) {
-    buffer->sequence_and_writing.store(0, std::memory_order_relaxed);  // Sequence 0, not writing
+    buffer->sequence_and_writing.store(detail::kNoCompletedMonitorSequence, std::memory_order_relaxed);
+  }
+  if constexpr (requires { buffer->slot_sequence_and_writing; }) {
+    for (auto& slot_sequence_and_writing : buffer->slot_sequence_and_writing) {
+      slot_sequence_and_writing.store(detail::kNoCompletedMonitorSequence, std::memory_order_relaxed);
+    }
   }
 
   if constexpr (std::is_trivially_copyable_v<Buffer>) {
@@ -92,6 +98,7 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
 void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(const uint frame_count, auto&& produce)
   requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>
 {
+  const uint32_t monitor_sequence = (frame_count + 1U) & detail::kSequenceMask;
   const auto last_write =
       detail::ToBufferState(shared_memory_buffer_.Get()->write_index.load(std::memory_order_relaxed));
   auto next_write =
@@ -106,6 +113,10 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
   if constexpr (requires { shared_memory_buffer_.Get()->sequence_and_writing; }) {
     shared_memory_buffer_.Get()->sequence_and_writing.fetch_or(detail::kWritingBitMask, std::memory_order_release);
   }
+  if constexpr (requires { shared_memory_buffer_.Get()->slot_sequence_and_writing; }) {
+    gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, detail::ToBufferIndex(next_write))
+        .store(detail::PackSequenceAndWriting(monitor_sequence, true), std::memory_order_release);
+  }
 
   SPDLOG_DEBUG("[{}, {}] producing frame...", frame_count, ToInt(next_write));
   detail::InvokeProducer(std::forward<decltype(produce)>(produce),
@@ -113,13 +124,18 @@ void Producer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ProduceFrame(co
                          detail::ToInt(next_write));
   SPDLOG_DEBUG("[{}, {}] producing frame... done", frame_count, ToInt(next_write));
 
-  // Update last written buffer
-  shared_memory_buffer_.Get()->last_written_buffer.store(detail::ToInt(next_write), std::memory_order_relaxed);
+  if constexpr (requires { shared_memory_buffer_.Get()->slot_sequence_and_writing; }) {
+    gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, detail::ToBufferIndex(next_write))
+        .store(detail::PackSequenceAndWriting(monitor_sequence, false), std::memory_order_release);
+  }
+
+  // Update last written buffer for passive monitors. This does not participate in consumer ownership.
+  shared_memory_buffer_.Get()->last_written_buffer.store(detail::ToInt(next_write), std::memory_order_release);
 
   if constexpr (requires { shared_memory_buffer_.Get()->sequence_and_writing; }) {
-    // Update sequence and clear writing flag atomically. This will only store LSB 31 bits of the frame count.
-    // We are OK with this because `sequence_and_writing` is only used for monitoring, not for synchronization.
-    shared_memory_buffer_.Get()->sequence_and_writing.store(frame_count & detail::kSequenceMask,
+    // Update sequence and clear writing flag atomically. Sequence 0 is reserved for "no completed sample yet".
+    // `sequence_and_writing` is monitor-only metadata, not producer/consumer synchronization.
+    shared_memory_buffer_.Get()->sequence_and_writing.store(detail::PackSequenceAndWriting(monitor_sequence, false),
                                                             std::memory_order_release);
 
     // Wake any waiting monitors

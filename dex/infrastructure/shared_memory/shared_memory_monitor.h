@@ -2,6 +2,7 @@
 #define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -22,13 +23,16 @@ concept MonitorCallback = std::invocable<Fn, const Buffer&> || std::invocable<Fn
  * Defines how the Monitor should handle producer writing state.
  */
 enum class MonitorReadMode {
-  // Skip reading when producer is writing
+  // Do not begin from an already-active producer write episode. If validation detects overlap while
+  // copying, the monitor discards or retries within the caller's timeout budget.
   SkipDuringProducerWrite,
 
-  // Wait until producer is done writing
+  // If the producer is already writing, wait for `sequence_and_writing` to change within the timeout
+  // budget. Only validated snapshots are returned.
   WaitForProducerWriteCompletion,
 
-  // Read even if producer is writing (may get partial updates)
+  // Best-effort mode. The monitor may sample while a producer write is in flight, but still performs
+  // post-copy validation and discards detected overlap when possible.
   ReadDuringProducerWrite
 };
 
@@ -43,6 +47,13 @@ enum class MonitorReadMode {
  * - Does not update the read_index
  * - Does not block the Producer
  * - Can observe data without affecting the normal Producer-Consumer flow
+ * - Samples producer-written state (`last_written_buffer` and monitor metadata), not the consumer
+ *   publication handshake (`read_index` / `write_index`)
+ *
+ * Guarantees:
+ * - Best-effort and lossy: samples may be skipped
+ * - Passive: no writes to producer/consumer ownership state
+ * - Returns only snapshots that pass monitor-side validation
  *
  * @tparam Buffer The buffer type to be monitored
  * @tparam buffer_size The number of buffers (default=2 for double buffering)
@@ -62,7 +73,8 @@ class Monitor {
   explicit Monitor(const std::string_view shared_memory_name)
       : shared_memory_buffer_(SharedMemoryBuffer::Open(
             shared_memory_name, ValidateBuffer<Buffer, buffer_size, StreamingSharedMemoryBuffer>)),
-        streaming_control_{StreamingControl::Instance()} {}
+        streaming_control_{StreamingControl::Instance()},
+        buffer_cache_(std::make_unique<Buffer>()) {}
 
   /**
    * @brief Checks if the monitor is valid and connected to shared memory.
@@ -93,11 +105,19 @@ class Monitor {
     requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>;
 
  private:
+  struct Snapshot {
+    std::reference_wrapper<const Buffer> buffer;
+    detail::SequenceNumber sequence;
+  };
+
+  [[nodiscard]] std::optional<Snapshot> GetLatestSnapshot(
+      double timeout_sec, MonitorReadMode read_mode, uint32_t minimum_sequence = detail::kNoCompletedMonitorSequence);
+
   SharedMemoryBuffer shared_memory_buffer_;
   std::reference_wrapper<StreamingControl> streaming_control_;
 
   // Buffer cache to store a copy of the latest buffer
-  mutable Buffer buffer_cache_;
+  mutable std::unique_ptr<Buffer> buffer_cache_;
 };
 
 }  // namespace dex::shared_memory
