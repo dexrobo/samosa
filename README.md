@@ -180,7 +180,10 @@ To visualize data on your host while the consumer runs inside Docker:
    ```bash
    bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_stream --serve
    ```
-2. **On Host**: Open the [Rerun Viewer](https://rerun.io/viewer) and connect to `127.0.0.1:9876`.
+2. **On Host**: Open the [Rerun Viewer](https://rerun.io/viewer) or use the native CLI to connect to the specific gRPC proxy URI:
+   ```bash
+   rerun rerun+http://127.0.0.1:9876/proxy
+   ```
 
 ### 4. VS Code Integration
 If you use VS Code, you can skip the manual commands by using the **Dev Containers** extension. Simply open the project and select **"Reopen in Container"**.
