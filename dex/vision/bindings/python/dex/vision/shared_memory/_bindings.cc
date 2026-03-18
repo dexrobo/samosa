@@ -14,6 +14,7 @@
 #include <string>
 
 #include "dex/drivers/camera/base/types.h"
+#include "dex/infrastructure/shared_memory/shared_memory_monitor.h"
 #include "dex/infrastructure/shared_memory/shared_memory_streaming.h"
 
 namespace nb = nanobind;
@@ -36,6 +37,11 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .value("Stopped", dex::shared_memory::RunResult::Stopped)
       .value("Timeout", dex::shared_memory::RunResult::Timeout)
       .value("Error", dex::shared_memory::RunResult::Error);
+
+  nb::enum_<dex::shared_memory::MonitorReadMode>(module_handle, "MonitorReadMode")
+      .value("SkipIfBusy", dex::shared_memory::MonitorReadMode::SkipIfBusy)
+      .value("WaitForStableSnapshot", dex::shared_memory::MonitorReadMode::WaitForStableSnapshot)
+      .value("Opportunistic", dex::shared_memory::MonitorReadMode::Opportunistic);
 
   nb::class_<dex::camera::CameraFrameBuffer>(module_handle, "CameraFrameBuffer")
       .def(nb::init<>())
@@ -163,5 +169,35 @@ NB_MODULE(shared_memory_bindings, module_handle) {
             return res;
           },
           nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"));
-}
 
+  nb::class_<dex::shared_memory::Monitor<CameraBuffer>>(module_handle, "Monitor")
+      .def(nb::init<const std::string&>())
+      .def("is_valid", &dex::shared_memory::Monitor<CameraBuffer>::IsValid)
+      .def(
+          "read",
+          [](dex::shared_memory::Monitor<CameraBuffer>& monitor, const double timeout_sec,
+             const dex::shared_memory::MonitorReadMode read_mode) -> CameraBuffer* {
+            auto result = std::make_unique<CameraBuffer>();
+            auto latest = monitor.GetLatestBuffer(timeout_sec, read_mode);
+            if (!latest.has_value()) {
+              return nullptr;
+            }
+            std::memcpy(result.get(), &latest->get(), sizeof(CameraBuffer));
+            return result.release();
+          },
+          nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(), nb::arg("timeout_sec") = 0.1,
+          nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot)
+      .def(
+          "read_into",
+          [](dex::shared_memory::Monitor<CameraBuffer>& monitor, CameraBuffer& dst, const double timeout_sec,
+             const dex::shared_memory::MonitorReadMode read_mode) {
+            auto latest = monitor.GetLatestBuffer(timeout_sec, read_mode);
+            if (!latest.has_value()) {
+              return false;
+            }
+            std::memcpy(&dst, &latest->get(), sizeof(CameraBuffer));
+            return true;
+          },
+          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = 0.1,
+          nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot);
+}

@@ -101,7 +101,7 @@ class Monitor {
    * TODO: Support monitor_fn with 1 argument. Current implementation only supports 2.
    */
   void Run(auto&& monitor_fn, double timeout_sec = 0.1, uint max_iterations = 0,
-           MonitorReadMode read_mode = MonitorReadMode::Opportunistic)
+           MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot)
     requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>;
 
  private:
@@ -125,4 +125,3 @@ class Monitor {
 #include "dex/infrastructure/shared_memory/shared_memory_monitor_impl.h"
 
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
-
