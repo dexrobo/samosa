@@ -72,14 +72,14 @@ http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_
 
 http_file(
     name = "ruff_amd64",
-    sha256 = "49592925719ee59a7e6675a95dc20e76c0b921b498500a54b1cce3c314fdf794",
-    url = "https://github.com/astral-sh/ruff/releases/download/0.9.9/ruff-x86_64-unknown-linux-gnu.tar.gz",
+    sha256 = "c253b106eb136f9cb4a319b5e3b4a9df78ec31fe15a3822efb69e7887ef9166e",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.15.6/ruff-x86_64-unknown-linux-gnu.tar.gz",
 )
 
 http_file(
     name = "ruff_arm64",
-    sha256 = "34b4ea311560d5e7f80597eaf3dede9ded194dffe131d7fee8841904792a644c",
-    url = "https://github.com/astral-sh/ruff/releases/download/0.9.9/ruff-aarch64-unknown-linux-gnu.tar.gz",
+    sha256 = "b9183a35a2693941e1089a5a80fd45724df886c135beebb0f8f1e103704af25e",
+    url = "https://github.com/astral-sh/ruff/releases/download/0.15.6/ruff-aarch64-unknown-linux-gnu.tar.gz",
 )
 
 http_file(
