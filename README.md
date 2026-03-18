@@ -125,6 +125,43 @@ while True:
 
 For more details, see the [Python Bindings README](dex/vision/bindings/python/README.md).
 
+## Development Environment (Docker)
+
+Samosa requires a Linux environment with specific kernel features (`futex`) and dependencies. A pre-configured Docker environment is provided.
+
+### 1. Build the Image
+```bash
+docker build -t samosa-env .devcontainer/
+```
+
+### 2. Launch the Container
+```bash
+docker run -it --rm \
+    --name samosa-dev \
+    --init \
+    --ipc=host \
+    -p 9876:9876 \
+    -v $(pwd):/workspace \
+    samosa-env
+```
+
+**Why these flags?**
+* `--init`: Enables a process reaper to prevent `<defunct>` (zombie) processes when killing benchmarks.
+* `--ipc=host`: Shared memory performance is best when using the host IPC namespace.
+* `-p 9876:9876`: Maps the default Rerun port for external visualization.
+
+### 3. Connecting an External Rerun Viewer
+To visualize data on your host while the consumer runs inside Docker:
+
+1. **Inside Docker**: Start the consumer in server mode:
+   ```bash
+   bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_stream --serve
+   ```
+2. **On Host**: Open the [Rerun Viewer](https://rerun.io/viewer) and connect to `127.0.0.1:9876`.
+
+### 4. VS Code Integration
+If you use VS Code, you can skip the manual commands by using the **Dev Containers** extension. Simply open the project and select **"Reopen in Container"**.
+
 ## Performance & Benchmarking
 
 Samosa includes a specialized benchmarking tool to measure end-to-end latency and frame-skip statistics under various loads.
