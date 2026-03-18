@@ -83,10 +83,110 @@ dex::shared_memory::Consumer<Telemetry> consumer{shm_name};
 // - [](const Telemetry& buffer, uint counter)
 // - [](const Telemetry& buffer, uint counter, int buffer_id)
 consumer.Run([](const Telemetry& buffer, uint counter) {
-    std::cout << "Received snapshot " << counter 
+    std::cout << "Received snapshot " << counter
               << " at: " << buffer.timestamp_ns << std::endl;
 });
 ```
+
+### 5. Fine-Grained Control (Step-by-Step)
+If you need to manage your own loop or integrate with an external event loop, you can use `ProduceSingle` and `ConsumeSingle`. These methods perform a single atomic transaction without entering a persistent loop.
+
+```cpp
+// Producer
+producer.ProduceSingle([](Telemetry& buffer, uint counter) {
+    // Fill buffer...
+});
+
+// Consumer
+timespec timeout = {1, 0};
+auto result = consumer.ConsumeSingle([](const Telemetry& buffer) {
+    // Process buffer...
+}, &timeout);
+```
+
+## Python Bindings
+
+Samosa provides high-performance Python bindings (via `nanobind`) for integration with NumPy, OpenCV, and Rerun. The bindings support zero-copy image access and explicit GIL management for high-frequency streaming.
+
+```python
+import dex.vision.shared_memory as shm
+
+# Pre-allocate buffer for zero-allocation consumption
+frame = shm.CameraFrameBuffer()
+consumer = shm.Consumer("camera_stream")
+
+while True:
+    status = consumer.read_into(frame)
+    if status == shm.RunResult.Success:
+        process(frame.color_image_bytes)
+    elif status == shm.RunResult.Timeout:
+        shm.StreamingControl.instance().reset()
+```
+
+For more details, see the [Python Bindings README](dex/vision/bindings/python/README.md).
+
+## Development Environment (Docker)
+
+Samosa requires a Linux environment with specific kernel features (`futex`) and dependencies. A pre-configured Docker environment is provided.
+
+### 1. Build the Image
+```bash
+docker build -t samosa-env .devcontainer/
+```
+
+### 2. Setup and Reuse
+**First time (Create and Run in background):**
+```bash
+docker run -d \
+    --name samosa-dev \
+    --init \
+    --ipc=host \
+    --cap-add=SYS_PTRACE \
+    --security-opt seccomp=unconfined \
+    -p 9876:9876 \
+    -v $(pwd):/workspace \
+    samosa-env \
+    sleep infinity
+```
+
+**Running commands:**
+Use `docker exec` to run build or test commands without creating a new container:
+```bash
+docker exec -it samosa-dev bazel run check -- all
+```
+
+**Interactive shell:**
+```bash
+docker exec -it samosa-dev bash
+```
+
+**Subsequent times:**
+If the container is stopped (e.g. after a reboot), simply start it again:
+```bash
+docker start samosa-dev
+```
+
+**Why these flags?**
+* `--init`: Enables a process reaper to prevent `<defunct>` (zombie) processes when killing benchmarks.
+* `--ipc=host`: Shared memory performance is best when using the host IPC namespace.
+* `--cap-add=SYS_PTRACE`: Required for C++ debuggers (GDB/LLDB) and profilers to attach to processes.
+* `--security-opt seccomp=unconfined`: Required for TSAN/Sanitizers to correctly set process personality.
+* `-p 9876:9876`: Maps the default Rerun port for external visualization.
+
+### 3. Connecting an External Rerun Viewer
+To visualize data on your host while the consumer runs inside Docker:
+
+1. **Inside Docker**: Start the consumer in server mode:
+   ```bash
+   bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_stream --serve
+   ```
+2. **On Host**: Open the [Rerun Viewer](https://rerun.io/viewer) or use the native CLI to connect to the specific gRPC proxy URI:
+   ```bash
+   rerun rerun+http://127.0.0.1:9876/proxy
+   ```
+
+### 4. VS Code Integration
+If you use VS Code, you can skip the manual commands by using the **Dev Containers** extension. Simply open the project and select **"Reopen in Container"**.
 
 ## Performance & Benchmarking
 
