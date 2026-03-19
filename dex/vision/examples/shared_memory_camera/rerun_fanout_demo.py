@@ -160,7 +160,8 @@ def build_blueprint(
             auto_layout=False,
         )
 
-    assert monitor_index is not None
+    if monitor_index is None:
+        raise ValueError("monitor_index is required for monitor blueprints")
     return rrb.Blueprint(
         rrb.Spatial2DView(origin=f"/monitor_{monitor_index}", name=f"Monitor {monitor_index}"),
         time_panel,
@@ -169,12 +170,18 @@ def build_blueprint(
     )
 
 
+def should_send_blueprint(args: argparse.Namespace, role: str) -> bool:
+    """Return whether this process should publish the default blueprint."""
+    if args.rerun_mode == "connect":
+        return role == "consumer"
+    return True
+
+
 def initialize_rerun(
     application_id: str,
     args: argparse.Namespace,
     role: str,
     *,
-    send_blueprint: bool,
     monitor_index: int | None = None,
     grpc_port: int | None = None,
 ) -> ModuleType:
@@ -185,7 +192,7 @@ def initialize_rerun(
     else:
         rr.init(application_id, spawn=False)
 
-    if send_blueprint:
+    if should_send_blueprint(args, role):
         rrb = importlib.import_module("rerun.blueprint")
         rr.send_blueprint(
             build_blueprint(rrb, args, role, monitor_index),
@@ -208,6 +215,16 @@ def initialize_rerun(
     server_uri = rr.serve_grpc(grpc_port=grpc_port, server_memory_limit="256MB")
     LOGGER.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
     return rr
+
+
+def initialize_monitor_rerun(
+    application_id: str,
+    args: argparse.Namespace,
+    monitor_index: int | None = None,
+    grpc_port: int | None = None,
+) -> ModuleType:
+    """Initialize a monitor-specific Rerun stream."""
+    return initialize_rerun(application_id, args, "monitor", monitor_index=monitor_index, grpc_port=grpc_port)
 
 
 def log_frame(rr: ModuleType, entity_path: str, frame_buffer: shm.CameraFrameBuffer) -> None:
