@@ -18,10 +18,12 @@ import os
 import signal
 import sys
 import time
-from collections.abc import Callable
 from pathlib import Path
-from types import ModuleType
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from types import ModuleType
 
 import cv2
 import dex.vision.shared_memory as shm
@@ -221,8 +223,8 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
 
     try:
         consumer = wait_for_valid_endpoint(shm.Consumer, args.shm_name, "consumer")
-    except RuntimeError as error:
-        LOGGER.exception("%s", error)
+    except RuntimeError:
+        LOGGER.exception("Consumer could not attach to shared memory")
         return
 
     frame_buffer = shm.CameraFrameBuffer()
@@ -259,8 +261,8 @@ def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Even
 
     try:
         monitor = wait_for_valid_endpoint(shm.Monitor, args.shm_name, "monitor")
-    except RuntimeError as error:
-        LOGGER.exception("%s", error)
+    except RuntimeError:
+        LOGGER.exception("Monitor could not attach to shared memory")
         return
 
     frame_buffer = shm.CameraFrameBuffer()
