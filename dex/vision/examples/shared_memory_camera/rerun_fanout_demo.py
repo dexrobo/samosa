@@ -161,7 +161,8 @@ def build_blueprint(
         )
 
     if monitor_index is None:
-        raise ValueError("monitor_index is required for monitor blueprints")
+        message = "monitor_index is required for monitor blueprints"
+        raise ValueError(message)
     return rrb.Blueprint(
         rrb.Spatial2DView(origin=f"/monitor_{monitor_index}", name=f"Monitor {monitor_index}"),
         time_panel,
