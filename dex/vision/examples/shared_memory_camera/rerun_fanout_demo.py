@@ -11,14 +11,17 @@ This example launches three Python processes:
 from __future__ import annotations
 
 import argparse
+import importlib
 import logging
 import multiprocessing as mp
 import os
 import signal
 import sys
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from types import ModuleType
+from typing import Protocol
 
 import cv2
 import dex.vision.shared_memory as shm
@@ -26,15 +29,23 @@ import numpy as np
 
 DEFAULT_ATTACH_TIMEOUT_SEC = 5.0
 DEFAULT_VIDEO_FPS = 30.0
+LOGGER = logging.getLogger("rerun_fanout_demo_py")
 
 
-def import_rerun() -> Any:
+class ValidEndpoint(Protocol):
+    """Minimal interface shared by Consumer and Monitor bindings."""
+
+    def is_valid(self) -> bool:
+        """Return whether the endpoint attached successfully."""
+
+
+def import_rerun() -> ModuleType:
     """Import rerun from a few layouts used in local and Bazel environments."""
     try:
-        import rerun as rr
+        return importlib.import_module("rerun")
     except ImportError:
         try:
-            from rerun_sdk import rerun as rr
+            return importlib.import_module("rerun_sdk.rerun")
         except ImportError:
             for sys_path in sys.path:
                 rerun_sdk_path = Path(sys_path) / "rerun_sdk"
@@ -44,14 +55,8 @@ def import_rerun() -> Any:
                 rerun_cli_path = rerun_sdk_path / "rerun_cli"
                 if rerun_cli_path.exists():
                     os.environ["PATH"] += os.pathsep + str(rerun_cli_path)
-                import rerun as rr
-
-                return rr
+                return importlib.import_module("rerun")
             raise
-        else:
-            return rr
-    else:
-        return rr
 
 
 def configure_logging() -> None:
@@ -74,8 +79,7 @@ def fit_frame_to_buffer(frame_bgr: np.ndarray) -> np.ndarray:
         return frame_rgb
 
     scale = min(shm.MAX_WIDTH / width, shm.MAX_HEIGHT / height)
-    resized = cv2.resize(frame_rgb, (int(width * scale), int(height * scale)))
-    return resized
+    return cv2.resize(frame_rgb, (int(width * scale), int(height * scale)))
 
 
 def populate_buffer(
@@ -103,14 +107,14 @@ def get_video_fps(cap: cv2.VideoCapture) -> float:
     video_fps = cap.get(cv2.CAP_PROP_FPS)
     if video_fps > 0:
         return video_fps
-    logging.warning("Video FPS unavailable, falling back to %.1f FPS for Rerun timing", DEFAULT_VIDEO_FPS)
+    LOGGER.warning("Video FPS unavailable, falling back to %.1f FPS for Rerun timing", DEFAULT_VIDEO_FPS)
     return DEFAULT_VIDEO_FPS
 
 
-def initialize_rerun(application_id: str, grpc_port: int) -> Any:
+def initialize_rerun(application_id: str, grpc_port: int) -> ModuleType:
     """Initialize a Rerun recording stream and expose it over gRPC."""
     rr = import_rerun()
-    import rerun.blueprint as rrb
+    rrb = importlib.import_module("rerun.blueprint")
 
     rr.init(application_id, spawn=False)
     rr.send_blueprint(
@@ -127,11 +131,11 @@ def initialize_rerun(application_id: str, grpc_port: int) -> Any:
         make_default=True,
     )
     server_uri = rr.serve_grpc(grpc_port=grpc_port, server_memory_limit="256MB")
-    logging.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
+    LOGGER.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
     return rr
 
 
-def log_frame(rr: Any, entity_path: str, frame_buffer: shm.CameraFrameBuffer) -> None:
+def log_frame(rr: ModuleType, entity_path: str, frame_buffer: shm.CameraFrameBuffer) -> None:
     """Log one frame into Rerun."""
     image = frame_to_rgb_image(frame_buffer)
     rr.set_time("video_time", duration=np.timedelta64(frame_buffer.timestamp_nanos, "ns"))
@@ -139,8 +143,8 @@ def log_frame(rr: Any, entity_path: str, frame_buffer: shm.CameraFrameBuffer) ->
 
 
 def wait_for_valid_endpoint(
-    factory: Any, shm_name: str, role: str, timeout_sec: float = DEFAULT_ATTACH_TIMEOUT_SEC
-) -> Any:
+    factory: Callable[[str], ValidEndpoint], shm_name: str, role: str, timeout_sec: float = DEFAULT_ATTACH_TIMEOUT_SEC
+) -> ValidEndpoint:
     """Retry attaching to shared memory until it becomes valid or the timeout expires."""
     deadline = time.monotonic() + timeout_sec
     while time.monotonic() < deadline:
@@ -149,7 +153,8 @@ def wait_for_valid_endpoint(
             return endpoint
         time.sleep(0.05)
 
-    raise RuntimeError(f"{role} could not attach to shared memory segment {shm_name!r} within {timeout_sec:.1f}s")
+    message = f"{role} could not attach to shared memory segment {shm_name!r} within {timeout_sec:.1f}s"
+    raise RuntimeError(message)
 
 
 def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
@@ -157,24 +162,24 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
     configure_logging()
 
     if not shm.initialize_shared_memory(args.shm_name):
-        logging.error("Failed to initialize shared memory %s", args.shm_name)
+        LOGGER.error("Failed to initialize shared memory %s", args.shm_name)
         return
 
     producer = shm.Producer(args.shm_name)
     if not producer.is_valid():
-        logging.error("Failed to create producer for %s", args.shm_name)
+        LOGGER.error("Failed to create producer for %s", args.shm_name)
         return
 
     cap = cv2.VideoCapture(args.video_path)
     if not cap.isOpened():
-        logging.error("Could not open video %s", args.video_path)
+        LOGGER.error("Could not open video %s", args.video_path)
         return
 
     video_fps = get_video_fps(cap)
     frame_period_sec = 1.0 / video_fps
     buffer = shm.CameraFrameBuffer()
     frame_id = 0
-    logging.info(
+    LOGGER.info(
         "Producer streaming %s into %s at source rate %.3f FPS",
         args.video_path,
         args.shm_name,
@@ -192,12 +197,12 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
                 break
 
             frame_rgb = fit_frame_to_buffer(frame_bgr)
-            video_time_nanos = int(round((frame_id * 1_000_000_000) / video_fps))
+            video_time_nanos = round((frame_id * 1_000_000_000) / video_fps)
             populate_buffer(buffer, frame_rgb, frame_id, video_time_nanos, "RerunFanoutProducer")
             producer.write(buffer)
 
             if frame_id % 120 == 0:
-                logging.info("Produced frame %d", frame_id)
+                LOGGER.info("Produced frame %d", frame_id)
             frame_id += 1
 
             elapsed = time.monotonic() - frame_start
@@ -206,7 +211,7 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
                 time.sleep(remaining)
     finally:
         cap.release()
-        logging.info("Producer stopped at frame %d", frame_id)
+        LOGGER.info("Producer stopped at frame %d", frame_id)
 
 
 def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
@@ -217,7 +222,7 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
     try:
         consumer = wait_for_valid_endpoint(shm.Consumer, args.shm_name, "consumer")
     except RuntimeError as error:
-        logging.error("%s", error)
+        LOGGER.exception("%s", error)
         return
 
     frame_buffer = shm.CameraFrameBuffer()
@@ -225,7 +230,7 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
     next_emit_time = time.monotonic()
     emit_period_sec = 1.0 / args.consumer_hz
 
-    logging.info("Consumer attached to %s and emitting at %.2f Hz", args.shm_name, args.consumer_hz)
+    LOGGER.info("Consumer attached to %s and emitting at %.2f Hz", args.shm_name, args.consumer_hz)
 
     while not stop_event.is_set():
         status = consumer.read_into(frame_buffer)
@@ -233,7 +238,7 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
             shm.StreamingControl.instance().reset()
             continue
         if status != shm.RunResult.Success:
-            logging.info("Consumer exiting with status %s", status)
+            LOGGER.info("Consumer exiting with status %s", status)
             return
         if frame_buffer.frame_id == last_frame_id:
             continue
@@ -255,12 +260,12 @@ def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Even
     try:
         monitor = wait_for_valid_endpoint(shm.Monitor, args.shm_name, "monitor")
     except RuntimeError as error:
-        logging.error("%s", error)
+        LOGGER.exception("%s", error)
         return
 
     frame_buffer = shm.CameraFrameBuffer()
     last_frame_id = -1
-    logging.info("Monitor attached to %s without throttling", args.shm_name)
+    LOGGER.info("Monitor attached to %s at source rate", args.shm_name)
 
     while not stop_event.is_set():
         if not monitor.read_into(frame_buffer, timeout_sec=args.monitor_timeout_sec):
@@ -305,7 +310,7 @@ def main() -> None:
     stop_event = mp.Event()
 
     def handle_signal(signum: int, _frame: object) -> None:
-        logging.info("Received signal %s, stopping children", signum)
+        LOGGER.info("Received signal %s, stopping children", signum)
         stop_children(stop_event)
 
     signal.signal(signal.SIGINT, handle_signal)
@@ -320,7 +325,7 @@ def main() -> None:
     for worker in workers:
         worker.start()
 
-    logging.info(
+    LOGGER.info(
         "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) and rerun+http://127.0.0.1:%d/proxy (monitor)",
         args.consumer_grpc_port,
         args.monitor_grpc_port,
@@ -333,10 +338,10 @@ def main() -> None:
             if exited_worker is None:
                 continue
 
-            logging.info("Worker %s exited with code %s, stopping the rest", exited_worker.name, exited_worker.exitcode)
+            LOGGER.info("Worker %s exited with code %s, stopping the rest", exited_worker.name, exited_worker.exitcode)
             break
     except KeyboardInterrupt:
-        logging.info("Keyboard interrupt received, stopping children")
+        LOGGER.info("Keyboard interrupt received, stopping children")
     finally:
         stop_children(stop_event)
         for worker in workers:
