@@ -331,6 +331,88 @@ def stop_children(stop_event: mp.synchronize.Event) -> None:
     shm.StreamingControl.instance().stop()
 
 
+def ensure_rerun_recording_id(args: argparse.Namespace) -> None:
+    """Populate the shared Rerun recording id for connect mode if needed."""
+    if args.rerun_mode == "connect" and not args.rerun_recording_id:
+        args.rerun_recording_id = f"shared-memory-fanout-{uuid.uuid4()}"
+
+
+def install_signal_handlers(stop_event: mp.synchronize.Event) -> None:
+    """Install signal handlers that request a clean shutdown."""
+
+    def handle_signal(signum: int, _frame: object) -> None:
+        LOGGER.info("Received signal %s, stopping children", signum)
+        stop_children(stop_event)
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+
+def create_workers(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> list[mp.Process]:
+    """Create the producer, consumer, and requested monitor worker processes."""
+    workers = [
+        mp.Process(target=producer_main, name="producer", args=(args, stop_event)),
+        mp.Process(target=consumer_rerun_main, name="consumer-rerun", args=(args, stop_event)),
+    ]
+    workers.extend(
+        mp.Process(
+            target=monitor_rerun_main,
+            name=f"monitor-rerun-{monitor_index}",
+            args=(args, stop_event, monitor_index),
+        )
+        for monitor_index in range(args.num_monitors)
+    )
+    return workers
+
+
+def log_viewer_endpoints(args: argparse.Namespace) -> None:
+    """Log where to connect viewers for the selected Rerun mode."""
+    if args.rerun_mode == "serve":
+        monitor_ports = [args.monitor_grpc_port + monitor_index for monitor_index in range(args.num_monitors)]
+        LOGGER.info("Connect consumer viewer to rerun+http://127.0.0.1:%d/proxy", args.consumer_grpc_port)
+        if monitor_ports:
+            LOGGER.info(
+                "Connect monitor viewers to: %s",
+                ", ".join(f"rerun+http://127.0.0.1:{port}/proxy" for port in monitor_ports),
+            )
+        else:
+            LOGGER.info("No monitor viewers requested (--num-monitors=0)")
+        return
+
+    LOGGER.info(
+        "Consumer and %d monitor(s) will stream into %s with shared recording_id=%s",
+        args.num_monitors,
+        args.rerun_url,
+        args.rerun_recording_id,
+    )
+
+
+def wait_for_worker_exit(workers: list[mp.Process]) -> None:
+    """Block until any worker exits or the parent is interrupted."""
+    try:
+        while True:
+            time.sleep(0.2)
+            exited_worker = next((worker for worker in workers if worker.exitcode is not None), None)
+            if exited_worker is None:
+                continue
+
+            LOGGER.info("Worker %s exited with code %s, stopping the rest", exited_worker.name, exited_worker.exitcode)
+            return
+    except KeyboardInterrupt:
+        LOGGER.info("Keyboard interrupt received, stopping children")
+
+
+def shutdown_workers(workers: list[mp.Process], stop_event: mp.synchronize.Event, shm_name: str) -> None:
+    """Request shutdown, join children, and remove the shared-memory segment."""
+    stop_children(stop_event)
+    for worker in workers:
+        worker.join(timeout=5.0)
+        if worker.is_alive():
+            worker.terminate()
+            worker.join(timeout=1.0)
+    shm.destroy_shared_memory(shm_name)
+
+
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Fan out shared-memory video to consumer and monitor Rerun outputs.")
@@ -384,72 +466,20 @@ def main() -> None:
     """Launch the producer, consumer, and monitor processes."""
     args = parse_args()
     configure_logging()
-    if args.rerun_mode == "connect" and not args.rerun_recording_id:
-        args.rerun_recording_id = f"shared-memory-fanout-{uuid.uuid4()}"
-
+    ensure_rerun_recording_id(args)
     mp.set_start_method("spawn", force=True)
     stop_event = mp.Event()
+    install_signal_handlers(stop_event)
 
-    def handle_signal(signum: int, _frame: object) -> None:
-        LOGGER.info("Received signal %s, stopping children", signum)
-        stop_children(stop_event)
-
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
-
-    workers = [
-        mp.Process(target=producer_main, name="producer", args=(args, stop_event)),
-        mp.Process(target=consumer_rerun_main, name="consumer-rerun", args=(args, stop_event)),
-    ]
-    for monitor_index in range(args.num_monitors):
-        workers.append(
-            mp.Process(
-                target=monitor_rerun_main,
-                name=f"monitor-rerun-{monitor_index}",
-                args=(args, stop_event, monitor_index),
-            )
-        )
-
+    workers = create_workers(args, stop_event)
     for worker in workers:
         worker.start()
 
-    if args.rerun_mode == "serve":
-        monitor_ports = [args.monitor_grpc_port + monitor_index for monitor_index in range(args.num_monitors)]
-        LOGGER.info("Connect consumer viewer to rerun+http://127.0.0.1:%d/proxy", args.consumer_grpc_port)
-        if monitor_ports:
-            LOGGER.info(
-                "Connect monitor viewers to: %s",
-                ", ".join(f"rerun+http://127.0.0.1:{port}/proxy" for port in monitor_ports),
-            )
-        else:
-            LOGGER.info("No monitor viewers requested (--num-monitors=0)")
-    else:
-        LOGGER.info(
-            "Consumer and %d monitor(s) will stream into %s with shared recording_id=%s",
-            args.num_monitors,
-            args.rerun_url,
-            args.rerun_recording_id,
-        )
-
+    log_viewer_endpoints(args)
     try:
-        while True:
-            time.sleep(0.2)
-            exited_worker = next((worker for worker in workers if worker.exitcode is not None), None)
-            if exited_worker is None:
-                continue
-
-            LOGGER.info("Worker %s exited with code %s, stopping the rest", exited_worker.name, exited_worker.exitcode)
-            break
-    except KeyboardInterrupt:
-        LOGGER.info("Keyboard interrupt received, stopping children")
+        wait_for_worker_exit(workers)
     finally:
-        stop_children(stop_event)
-        for worker in workers:
-            worker.join(timeout=5.0)
-            if worker.is_alive():
-                worker.terminate()
-                worker.join(timeout=1.0)
-        shm.destroy_shared_memory(args.shm_name)
+        shutdown_workers(workers, stop_event, args.shm_name)
 
 
 if __name__ == "__main__":
