@@ -152,6 +152,23 @@ TEST_F(SharedMemoryMonitorTest, IndependentReading) {
   EXPECT_EQ(std::string(buffer_opt->get().data()), message_b);
 }
 
+TEST_F(SharedMemoryMonitorTest, ReadIntoCopiesValidatedSnapshotAndReportsSequence) {
+  auto shared_memory = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
+      shared_memory_name_, InitializeBuffer<test::ArrayBuffer>);
+  ASSERT_TRUE(shared_memory.IsValid());
+
+  SetPublishedSnapshot(shared_memory, detail::BufferState::BufferB, 7, "copied payload");
+
+  Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
+  ASSERT_TRUE(monitor.IsValid());
+
+  test::ArrayBuffer destination{};
+  detail::SequenceNumber sequence = 0;
+  EXPECT_TRUE(monitor.ReadInto(destination, 0.1, MonitorReadMode::WaitForStableSnapshot, &sequence));
+  EXPECT_EQ(std::string(destination.data()), "copied payload");
+  EXPECT_EQ(sequence, 7);
+}
+
 TEST_F(SharedMemoryMonitorTest, SkipDuringWrite) {
   // Create shared memory
   auto shared_memory = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(

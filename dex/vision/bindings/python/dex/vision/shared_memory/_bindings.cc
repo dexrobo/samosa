@@ -180,32 +180,29 @@ NB_MODULE(shared_memory_bindings, module_handle) {
       .def(nb::init<const std::string&>())
       .def("is_valid", &dex::shared_memory::Monitor<CameraBuffer>::IsValid)
       .def(
+          "read_into",
+          [](dex::shared_memory::Monitor<CameraBuffer>& monitor, CameraBuffer& dst, const double timeout_sec,
+             const dex::shared_memory::MonitorReadMode read_mode) {
+            return monitor.ReadInto(dst, timeout_sec, read_mode);
+          },
+          "Copy the latest validated snapshot into caller-owned storage. Preferred for repeated reads because it "
+          "reuses the destination buffer and avoids per-read allocations.",
+          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
+          nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot)
+      .def(
           "read",
           [](dex::shared_memory::Monitor<CameraBuffer>& monitor, const double timeout_sec,
              const dex::shared_memory::MonitorReadMode read_mode) -> CameraBuffer* {
             auto result = std::make_unique<CameraBuffer>();
-            auto latest = monitor.GetLatestBuffer(timeout_sec, read_mode);
-            if (!latest.has_value()) {
+            if (!monitor.ReadInto(*result, timeout_sec, read_mode)) {
               return nullptr;
             }
-            std::memcpy(result.get(), &latest->get(), sizeof(CameraBuffer));
             return result.release();
           },
+          "Convenience wrapper around read_into() that allocates a fresh CameraFrameBuffer for each successful read. "
+          "Prefer read_into() in loops and long-running code.",
           nb::rv_policy::take_ownership, nb::call_guard<nb::gil_scoped_release>(),
           nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
-          nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot)
-      .def(
-          "read_into",
-          [](dex::shared_memory::Monitor<CameraBuffer>& monitor, CameraBuffer& dst, const double timeout_sec,
-             const dex::shared_memory::MonitorReadMode read_mode) {
-            auto latest = monitor.GetLatestBuffer(timeout_sec, read_mode);
-            if (!latest.has_value()) {
-              return false;
-            }
-            std::memcpy(&dst, &latest->get(), sizeof(CameraBuffer));
-            return true;
-          },
-          nb::call_guard<nb::gil_scoped_release>(), nb::arg("dst"), nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
           nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot);
 }
 

@@ -126,12 +126,26 @@ import dex.vision.shared_memory as shm
 import numpy as np
 
 monitor = shm.Monitor("camera_stream")
+frame = shm.CameraFrameBuffer()
 
-frame = monitor.read(0.1, shm.MonitorReadMode.WaitForStableSnapshot)
-if frame is not None:
+if monitor.read_into(frame, 0.1, shm.MonitorReadMode.WaitForStableSnapshot):
     image = np.array(frame.color_image_bytes[:frame.color_image_size]).reshape(
         (frame.color_height, frame.color_width, 3)
     )
+    print(f"Observed frame {frame.frame_id}")
+```
+
+Prefer `monitor.read_into(...)` for repeated reads:
+
+* it reuses caller-owned storage
+* it avoids allocating a new `CameraFrameBuffer` on each successful read
+* it is the preferred API for loops and long-running monitoring
+
+`monitor.read(...)` is still available as a convenience wrapper when you want the simplest possible call shape:
+
+```python
+frame = monitor.read(0.1, shm.MonitorReadMode.WaitForStableSnapshot)
+if frame is not None:
     print(f"Observed frame {frame.frame_id}")
 ```
 

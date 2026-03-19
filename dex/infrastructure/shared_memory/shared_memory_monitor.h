@@ -2,7 +2,6 @@
 #define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
 
 #include <functional>
-#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -74,8 +73,7 @@ class Monitor {
   explicit Monitor(const std::string_view shared_memory_name)
       : shared_memory_buffer_(SharedMemoryBuffer::Open(
             shared_memory_name, ValidateBuffer<Buffer, buffer_size, StreamingSharedMemoryBuffer>)),
-        streaming_control_{StreamingControl::Instance()},
-        buffer_cache_(std::make_unique<Buffer>()) {}
+        streaming_control_{StreamingControl::Instance()} {}
 
   /**
    * @brief Checks if the monitor is valid and connected to shared memory.
@@ -84,14 +82,32 @@ class Monitor {
   [[nodiscard]] bool IsValid() const { return shared_memory_buffer_.IsValid(); }
 
   /**
-   * @brief Get the latest buffer from shared memory
-   * @param writing_mode How to handle the case when producer is writing
-   * @param timeout_sec Maximum time to wait in seconds (for WaitForCompletion mode)
+   * @brief Get the latest validated buffer as a convenience reference.
+   * @param timeout_sec Maximum time to wait in seconds
+   * @param read_mode How to handle the case when producer is writing
    * @return Optional reference to the latest buffer, or nullopt if no valid buffer
+   *
+   * Prefer ReadInto() for repeated or concurrent reads. This convenience API returns a reference backed by
+   * internal scratch storage rather than caller-owned memory.
    */
   std::optional<std::reference_wrapper<const Buffer>> GetLatestBuffer(
       double timeout_sec = detail::kDefaultMonitorTimeoutSec,
       MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot);
+
+  /**
+   * @brief Copy the latest validated snapshot into caller-owned storage.
+   * @param destination Buffer to overwrite with the accepted snapshot
+   * @param timeout_sec Maximum time to wait in seconds
+   * @param read_mode How to handle the case when producer is writing
+   * @param sequence Optional out-parameter for the accepted monitor sequence
+   * @return true if a validated snapshot was copied, false otherwise
+   *
+   * This is the preferred API for repeated reads because it reuses caller-owned storage and avoids
+   * per-read allocations.
+   */
+  [[nodiscard]] bool ReadInto(Buffer& destination, double timeout_sec = detail::kDefaultMonitorTimeoutSec,
+                              MonitorReadMode read_mode = MonitorReadMode::WaitForStableSnapshot,
+                              detail::SequenceNumber* sequence = nullptr) const;
 
   /**
    * @brief Run a monitoring loop that calls a function when new data is available
@@ -107,11 +123,6 @@ class Monitor {
     requires detail::MonitorCallback<std::remove_reference_t<decltype(monitor_fn)>, Buffer>;
 
  private:
-  struct Snapshot {
-    std::reference_wrapper<const Buffer> buffer;
-    detail::SequenceNumber sequence;
-  };
-
   struct CandidateSlot {
     uint32_t raw_slot_id;
     size_t slot_index;
@@ -131,14 +142,12 @@ class Monitor {
   [[nodiscard]] std::optional<CandidateSlot> SelectCandidateSlot(
       MonitorReadMode read_mode, uint32_t initial_packed, const std::chrono::steady_clock::time_point& deadline) const;
   [[nodiscard]] bool IsAcceptedSnapshot(const CandidateSlot& candidate) const;
-  [[nodiscard]] std::optional<Snapshot> GetLatestSnapshot(
-      double timeout_sec, MonitorReadMode read_mode, uint32_t minimum_sequence = detail::kNoCompletedMonitorSequence);
+  [[nodiscard]] std::optional<detail::SequenceNumber> CopyLatestSnapshotInto(
+      Buffer& destination, double timeout_sec, MonitorReadMode read_mode,
+      uint32_t minimum_sequence = detail::kNoCompletedMonitorSequence) const;
 
   SharedMemoryBuffer shared_memory_buffer_;
   std::reference_wrapper<StreamingControl> streaming_control_;
-
-  // Buffer cache to store a copy of the latest buffer
-  mutable std::unique_ptr<Buffer> buffer_cache_;
 };
 
 }  // namespace dex::shared_memory

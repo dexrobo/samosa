@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cmath>  // For std::modf
+#include <memory>
 
 #include "spdlog/spdlog.h"
 
@@ -144,9 +145,10 @@ bool Monitor<Buffer, buffer_size, SharedMemoryBuffer>::IsAcceptedSnapshot(const 
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
-auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double timeout_sec, MonitorReadMode read_mode,
-                                                                         const uint32_t minimum_sequence)
-    -> std::optional<Snapshot> {
+auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::CopyLatestSnapshotInto(Buffer& destination, double timeout_sec,
+                                                                              MonitorReadMode read_mode,
+                                                                              const uint32_t minimum_sequence) const
+    -> std::optional<detail::SequenceNumber> {
   if (!shared_memory_buffer_.IsValid()) {
     return std::nullopt;
   }
@@ -176,7 +178,7 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
       continue;
     }
 
-    *buffer_cache_ = gsl::at(shared_memory_buffer_.Get()->buffers, candidate.slot_index);
+    destination = gsl::at(shared_memory_buffer_.Get()->buffers, candidate.slot_index);
 
     if (!IsAcceptedSnapshot(candidate)) {
       SPDLOG_DEBUG("Monitor: Discarding suspicious snapshot from slot {}", candidate.raw_slot_id);
@@ -193,7 +195,7 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestSnapshot(double 
       return std::nullopt;
     }
 
-    return Snapshot{.buffer = std::cref(*buffer_cache_), .sequence = accepted_sequence};
+    return accepted_sequence;
   }
 
   return std::nullopt;
@@ -203,11 +205,26 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double timeout_sec, MonitorReadMode read_mode)
     -> std::optional<std::reference_wrapper<const Buffer>> {
-  auto snapshot = GetLatestSnapshot(timeout_sec, read_mode);
-  if (!snapshot.has_value()) {
+  thread_local auto buffer_cache = std::make_unique<Buffer>();
+  if (!ReadInto(*buffer_cache, timeout_sec, read_mode)) {
     return std::nullopt;
   }
-  return snapshot->buffer;
+  return std::cref(*buffer_cache);
+}
+
+template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
+  requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
+bool Monitor<Buffer, buffer_size, SharedMemoryBuffer>::ReadInto(Buffer& destination, double timeout_sec,
+                                                                MonitorReadMode read_mode,
+                                                                detail::SequenceNumber* sequence) const {
+  auto accepted_sequence = CopyLatestSnapshotInto(destination, timeout_sec, read_mode);
+  if (!accepted_sequence.has_value()) {
+    return false;
+  }
+  if (sequence != nullptr) {
+    *sequence = *accepted_sequence;
+  }
+  return true;
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
@@ -221,6 +238,7 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
     return;
   }
 
+  auto buffer_cache = std::make_unique<Buffer>();
   uint iteration_count = 0;
   uint32_t last_observed_sequence = detail::kNoCompletedMonitorSequence;
 
@@ -234,10 +252,10 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 
     // If there's new data
     if (current_sequence > last_observed_sequence) {
-      auto snapshot_opt = GetLatestSnapshot(timeout_sec, read_mode, last_observed_sequence);
-      if (snapshot_opt) {
-        detail::InvokeMonitor(monitor_fn, snapshot_opt->buffer.get(), snapshot_opt->sequence);
-        last_observed_sequence = snapshot_opt->sequence;
+      auto accepted_sequence = CopyLatestSnapshotInto(*buffer_cache, timeout_sec, read_mode, last_observed_sequence);
+      if (accepted_sequence) {
+        detail::InvokeMonitor(monitor_fn, *buffer_cache, *accepted_sequence);
+        last_observed_sequence = *accepted_sequence;
         iteration_count++;
       }
     } else {

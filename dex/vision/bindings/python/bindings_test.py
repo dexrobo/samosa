@@ -128,18 +128,18 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
 
         producer.write(write_buffer)
 
-        monitored = monitor.read(0.1, shm.MonitorReadMode.WaitForStableSnapshot)
-        assert monitored is not None
-        assert monitored.frame_id == 456
-        assert monitored.camera_name == "MonitorCamera"
-
-        monitored_pattern = np.array(monitored.color_image_bytes[: monitored.color_image_size])
-        np.testing.assert_array_equal(monitored_pattern, test_pattern)
-
         dst = shm.CameraFrameBuffer()
-        found = monitor.read_into(dst, 0.1, shm.MonitorReadMode.Opportunistic)
+        found = monitor.read_into(dst, 0.1, shm.MonitorReadMode.WaitForStableSnapshot)
         assert found
         assert dst.frame_id == 456
+        assert dst.camera_name == "MonitorCamera"
+
+        dst_pattern = np.array(dst.color_image_bytes[: dst.color_image_size])
+        np.testing.assert_array_equal(dst_pattern, test_pattern)
+
+        monitored = monitor.read(0.1, shm.MonitorReadMode.Opportunistic)
+        assert monitored is not None
+        assert monitored.frame_id == 456
 
         shm.destroy_shared_memory(shm_name)
 
