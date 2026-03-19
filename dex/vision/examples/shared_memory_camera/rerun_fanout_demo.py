@@ -384,7 +384,8 @@ def main() -> None:
 
     if args.rerun_mode == "serve":
         LOGGER.info(
-            "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) and rerun+http://127.0.0.1:%d/proxy (monitor)",
+            "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) "
+            "and rerun+http://127.0.0.1:%d/proxy (monitor)",
             args.consumer_grpc_port,
             args.monitor_grpc_port,
         )
