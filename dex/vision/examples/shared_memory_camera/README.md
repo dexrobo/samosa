@@ -49,6 +49,37 @@ Watch the stream (and optionally visualize in Rerun):
 bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_video_stream
 ```
 
+### Option B2: Python Fanout Demo With Consumer + Monitor
+This launches three Python processes:
+
+1. a producer that streams a video file into shared memory without throttling
+2. a normal shared-memory consumer that logs to a Rerun gRPC service at 5 Hz
+3. a passive monitor that logs to a second Rerun gRPC service without throttling
+
+Run it like this:
+
+```bash
+bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
+  path/to/your/video.mp4 \
+  --loop \
+  --shm-name rerun_fanout_demo \
+  --consumer-grpc-port 9876 \
+  --monitor-grpc-port 9877
+```
+
+Then connect two viewers:
+
+```bash
+rerun rerun+http://127.0.0.1:9876/proxy
+rerun rerun+http://127.0.0.1:9877/proxy
+```
+
+What you should see:
+
+* the consumer viewer advances at about 5 Hz because it is intentionally throttled
+* the monitor viewer updates as fast as the passive monitor can validate snapshots
+* both viewers come from the same producer, but only the consumer participates in the producer/consumer handshake
+
 ### Option C: Cross-Language Stream
 This demonstrates that the shared memory protocol is identical across languages.
 
