@@ -52,9 +52,9 @@ bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_vi
 ### Option B2: Python Fanout Demo With Consumer + Monitor
 This launches three Python processes:
 
-1. a producer that streams a video file into shared memory without throttling
+1. a producer that streams a video file into shared memory at the source video's frame rate
 2. a normal shared-memory consumer that logs to a Rerun gRPC service at 5 Hz
-3. a passive monitor that logs to a second Rerun gRPC service without throttling
+3. a passive monitor that logs to a second Rerun gRPC service at the full source video rate
 
 Run it like this:
 
@@ -76,8 +76,9 @@ rerun rerun+http://127.0.0.1:9877/proxy
 
 What you should see:
 
+* the producer publishes frames at the source video's FPS
 * the consumer viewer advances at about 5 Hz because it is intentionally throttled
-* the monitor viewer updates as fast as the passive monitor can validate snapshots
+* the monitor viewer updates at the full source rate because it passively observes every produced frame it can validate
 * both viewers come from the same producer, but only the consumer participates in the producer/consumer handshake
 
 ### Option C: Cross-Language Stream

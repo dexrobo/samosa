@@ -144,6 +144,7 @@ docker run -d \
     --cap-add=SYS_PTRACE \
     --security-opt seccomp=unconfined \
     -p 9876:9876 \
+    -p 9877:9877 \
     -v $(pwd):/workspace \
     samosa-env \
     sleep infinity

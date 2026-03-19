@@ -1,11 +1,11 @@
-"""Fan out a video stream to both a throttled consumer and an unthrottled monitor.
+"""Fan out a video stream to both a throttled consumer and a source-rate monitor.
 
 This example launches three Python processes:
 
-1. A producer that streams video frames into shared memory as fast as possible.
+1. A producer that streams video frames into shared memory at the source video's frame rate.
 2. A normal shared-memory consumer that reads the stream and logs to a Rerun gRPC server at 5 Hz.
 3. A passive shared-memory monitor that samples the same stream and logs to a second Rerun gRPC server
-   without throttling.
+   at the full source frame rate.
 """
 
 from __future__ import annotations
@@ -25,6 +25,7 @@ import dex.vision.shared_memory as shm
 import numpy as np
 
 DEFAULT_ATTACH_TIMEOUT_SEC = 5.0
+DEFAULT_VIDEO_FPS = 30.0
 
 
 def import_rerun() -> Any:
@@ -77,7 +78,13 @@ def fit_frame_to_buffer(frame_bgr: np.ndarray) -> np.ndarray:
     return resized
 
 
-def populate_buffer(buffer: shm.CameraFrameBuffer, frame_rgb: np.ndarray, frame_id: int, camera_name: str) -> None:
+def populate_buffer(
+    buffer: shm.CameraFrameBuffer,
+    frame_rgb: np.ndarray,
+    frame_id: int,
+    video_time_nanos: int,
+    camera_name: str,
+) -> None:
     """Fill the POD shared-memory buffer from a numpy RGB frame."""
     height, width, _ = frame_rgb.shape
     flat_frame = frame_rgb.reshape(-1)
@@ -86,15 +93,39 @@ def populate_buffer(buffer: shm.CameraFrameBuffer, frame_rgb: np.ndarray, frame_
     buffer.color_height = height
     buffer.color_image_size = width * height * 3
     buffer.frame_id = frame_id
-    buffer.timestamp_nanos = time.monotonic_ns()
+    buffer.timestamp_nanos = video_time_nanos
     buffer.camera_name = camera_name
     buffer.color_image_bytes[: flat_frame.size] = flat_frame.view(np.uint8)
+
+
+def get_video_fps(cap: cv2.VideoCapture) -> float:
+    """Get a usable source-video frame rate for timeline reconstruction."""
+    video_fps = cap.get(cv2.CAP_PROP_FPS)
+    if video_fps > 0:
+        return video_fps
+    logging.warning("Video FPS unavailable, falling back to %.1f FPS for Rerun timing", DEFAULT_VIDEO_FPS)
+    return DEFAULT_VIDEO_FPS
 
 
 def initialize_rerun(application_id: str, grpc_port: int) -> Any:
     """Initialize a Rerun recording stream and expose it over gRPC."""
     rr = import_rerun()
+    import rerun.blueprint as rrb
+
     rr.init(application_id, spawn=False)
+    rr.send_blueprint(
+        rrb.Blueprint(
+            rrb.TimePanel(
+                timeline="video_time",
+                playback_speed=1.0,
+                play_state="playing",
+            ),
+            auto_views=True,
+            auto_layout=True,
+        ),
+        make_active=True,
+        make_default=True,
+    )
     server_uri = rr.serve_grpc(grpc_port=grpc_port, server_memory_limit="256MB")
     logging.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
     return rr
@@ -103,8 +134,7 @@ def initialize_rerun(application_id: str, grpc_port: int) -> Any:
 def log_frame(rr: Any, entity_path: str, frame_buffer: shm.CameraFrameBuffer) -> None:
     """Log one frame into Rerun."""
     image = frame_to_rgb_image(frame_buffer)
-    rr.set_time("stream_time", sequence=int(frame_buffer.frame_id))
-    rr.set_time("capture_time", duration=np.timedelta64(frame_buffer.timestamp_nanos, "ns"))
+    rr.set_time("video_time", duration=np.timedelta64(frame_buffer.timestamp_nanos, "ns"))
     rr.log(entity_path, rr.Image(image))
 
 
@@ -123,7 +153,7 @@ def wait_for_valid_endpoint(
 
 
 def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
-    """Read a video file and publish it to shared memory as fast as possible."""
+    """Read a video file and publish it to shared memory at the source frame rate."""
     configure_logging()
 
     if not shm.initialize_shared_memory(args.shm_name):
@@ -140,12 +170,20 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
         logging.error("Could not open video %s", args.video_path)
         return
 
+    video_fps = get_video_fps(cap)
+    frame_period_sec = 1.0 / video_fps
     buffer = shm.CameraFrameBuffer()
     frame_id = 0
-    logging.info("Producer streaming %s into %s without throttling", args.video_path, args.shm_name)
+    logging.info(
+        "Producer streaming %s into %s at source rate %.3f FPS",
+        args.video_path,
+        args.shm_name,
+        video_fps,
+    )
 
     try:
         while not stop_event.is_set():
+            frame_start = time.monotonic()
             ok, frame_bgr = cap.read()
             if not ok:
                 if args.loop:
@@ -154,12 +192,18 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
                 break
 
             frame_rgb = fit_frame_to_buffer(frame_bgr)
-            populate_buffer(buffer, frame_rgb, frame_id, "RerunFanoutProducer")
+            video_time_nanos = int(round((frame_id * 1_000_000_000) / video_fps))
+            populate_buffer(buffer, frame_rgb, frame_id, video_time_nanos, "RerunFanoutProducer")
             producer.write(buffer)
 
             if frame_id % 120 == 0:
                 logging.info("Produced frame %d", frame_id)
             frame_id += 1
+
+            elapsed = time.monotonic() - frame_start
+            remaining = frame_period_sec - elapsed
+            if remaining > 0:
+                time.sleep(remaining)
     finally:
         cap.release()
         logging.info("Producer stopped at frame %d", frame_id)
