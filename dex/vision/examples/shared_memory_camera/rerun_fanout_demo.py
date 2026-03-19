@@ -18,6 +18,7 @@ import os
 import signal
 import sys
 import time
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
@@ -30,6 +31,8 @@ import dex.vision.shared_memory as shm
 import numpy as np
 
 DEFAULT_ATTACH_TIMEOUT_SEC = 5.0
+DEFAULT_RERUN_CONNECT_URL = "rerun+http://host.docker.internal:9876/proxy"
+DEFAULT_SHARED_RECORDING_APP_ID = "shared_memory_fanout_rerun"
 DEFAULT_VIDEO_FPS = 30.0
 LOGGER = logging.getLogger("rerun_fanout_demo_py")
 
@@ -113,25 +116,47 @@ def get_video_fps(cap: cv2.VideoCapture) -> float:
     return DEFAULT_VIDEO_FPS
 
 
-def initialize_rerun(application_id: str, grpc_port: int) -> ModuleType:
-    """Initialize a Rerun recording stream and expose it over gRPC."""
+def initialize_rerun(
+    application_id: str,
+    args: argparse.Namespace,
+    role: str,
+    *,
+    send_blueprint: bool,
+) -> ModuleType:
+    """Initialize a Rerun recording stream in either per-process serve or shared connect mode."""
     rr = import_rerun()
-    rrb = importlib.import_module("rerun.blueprint")
+    if args.rerun_mode == "connect":
+        rr.init(DEFAULT_SHARED_RECORDING_APP_ID, recording_id=args.rerun_recording_id, spawn=False)
+    else:
+        rr.init(application_id, spawn=False)
 
-    rr.init(application_id, spawn=False)
-    rr.send_blueprint(
-        rrb.Blueprint(
-            rrb.TimePanel(
-                timeline="video_time",
-                playback_speed=1.0,
-                play_state="playing",
+    if send_blueprint:
+        rrb = importlib.import_module("rerun.blueprint")
+        rr.send_blueprint(
+            rrb.Blueprint(
+                rrb.TimePanel(
+                    timeline="video_time",
+                    playback_speed=1.0,
+                    play_state="playing",
+                ),
+                auto_views=True,
+                auto_layout=True,
             ),
-            auto_views=True,
-            auto_layout=True,
-        ),
-        make_active=True,
-        make_default=True,
-    )
+            make_active=True,
+            make_default=True,
+        )
+
+    if args.rerun_mode == "connect":
+        rr.connect_grpc(args.rerun_url)
+        LOGGER.info(
+            "Rerun %s streaming to %s with shared recording_id=%s",
+            role,
+            args.rerun_url,
+            args.rerun_recording_id,
+        )
+        return rr
+
+    grpc_port = args.consumer_grpc_port if role == "consumer" else args.monitor_grpc_port
     server_uri = rr.serve_grpc(grpc_port=grpc_port, server_memory_limit="256MB")
     LOGGER.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
     return rr
@@ -219,7 +244,12 @@ def producer_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) ->
 def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
     """Read the stream through the real consumer path and publish to Rerun at 5 Hz."""
     configure_logging()
-    rr = initialize_rerun("shared_memory_consumer_rerun", args.consumer_grpc_port)
+    rr = initialize_rerun(
+        "shared_memory_consumer_rerun",
+        args,
+        "consumer",
+        send_blueprint=True,
+    )
 
     try:
         consumer = wait_for_valid_endpoint(shm.Consumer, args.shm_name, "consumer")
@@ -257,7 +287,12 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
 def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
     """Passively monitor the producer-written stream and publish to a separate Rerun server."""
     configure_logging()
-    rr = initialize_rerun("shared_memory_monitor_rerun", args.monitor_grpc_port)
+    rr = initialize_rerun(
+        "shared_memory_monitor_rerun",
+        args,
+        "monitor",
+        send_blueprint=args.rerun_mode == "serve",
+    )
 
     try:
         monitor = wait_for_valid_endpoint(shm.Monitor, args.shm_name, "monitor")
@@ -287,11 +322,26 @@ def stop_children(stop_event: mp.synchronize.Event) -> None:
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
-    parser = argparse.ArgumentParser(description="Fan out shared-memory video to consumer and monitor Rerun servers.")
+    parser = argparse.ArgumentParser(description="Fan out shared-memory video to consumer and monitor Rerun outputs.")
     parser.add_argument("video_path", help="Path to a video file readable by OpenCV")
     parser.add_argument("--shm-name", default="rerun_fanout_demo", help="Shared-memory segment name")
+    parser.add_argument(
+        "--rerun-mode",
+        choices=("serve", "connect"),
+        default="serve",
+        help="Serve two local Rerun gRPC endpoints, or connect both streams into one existing Rerun recording.",
+    )
     parser.add_argument("--consumer-grpc-port", type=int, default=9876, help="Rerun gRPC port for consumer output")
     parser.add_argument("--monitor-grpc-port", type=int, default=9877, help="Rerun gRPC port for monitor output")
+    parser.add_argument(
+        "--rerun-url",
+        default=DEFAULT_RERUN_CONNECT_URL,
+        help="Rerun gRPC endpoint to connect to when --rerun-mode=connect",
+    )
+    parser.add_argument(
+        "--rerun-recording-id",
+        help="Explicit shared Rerun recording id for connect mode. Defaults to a generated UUID.",
+    )
     parser.add_argument("--consumer-hz", type=float, default=5.0, help="Consumer-side Rerun logging rate")
     parser.add_argument(
         "--monitor-timeout-sec",
@@ -300,13 +350,18 @@ def parse_args() -> argparse.Namespace:
         help="Wait budget for each passive monitor read attempt",
     )
     parser.add_argument("--loop", action="store_true", help="Loop the source video forever")
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.rerun_mode == "connect" and not args.rerun_url:
+        parser.error("--rerun-url is required when --rerun-mode=connect")
+    return args
 
 
 def main() -> None:
     """Launch the producer, consumer, and monitor processes."""
     args = parse_args()
     configure_logging()
+    if args.rerun_mode == "connect" and not args.rerun_recording_id:
+        args.rerun_recording_id = f"shared-memory-fanout-{uuid.uuid4()}"
 
     mp.set_start_method("spawn", force=True)
     stop_event = mp.Event()
@@ -327,11 +382,18 @@ def main() -> None:
     for worker in workers:
         worker.start()
 
-    LOGGER.info(
-        "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) and rerun+http://127.0.0.1:%d/proxy (monitor)",
-        args.consumer_grpc_port,
-        args.monitor_grpc_port,
-    )
+    if args.rerun_mode == "serve":
+        LOGGER.info(
+            "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) and rerun+http://127.0.0.1:%d/proxy (monitor)",
+            args.consumer_grpc_port,
+            args.monitor_grpc_port,
+        )
+    else:
+        LOGGER.info(
+            "Consumer and monitor will stream into %s with shared recording_id=%s",
+            args.rerun_url,
+            args.rerun_recording_id,
+        )
 
     try:
         while True:

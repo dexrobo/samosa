@@ -56,13 +56,19 @@ This launches three Python processes:
 2. a normal shared-memory consumer that logs to a Rerun gRPC service at 5 Hz
 3. a passive monitor that logs to a second Rerun gRPC service at the full source video rate
 
-Run it like this:
+The demo supports two mutually exclusive Rerun output modes:
+
+* `--rerun-mode serve`: start two local gRPC services, one for the consumer and one for the monitor
+* `--rerun-mode connect`: connect both the consumer and the monitor to one existing Rerun endpoint using a shared recording id
+
+Run the default `serve` mode like this:
 
 ```bash
 bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
   path/to/your/video.mp4 \
   --loop \
   --shm-name rerun_fanout_demo \
+  --rerun-mode serve \
   --consumer-grpc-port 9876 \
   --monitor-grpc-port 9877
 ```
@@ -74,12 +80,28 @@ rerun rerun+http://127.0.0.1:9876/proxy
 rerun rerun+http://127.0.0.1:9877/proxy
 ```
 
+If you want one host-side Rerun recording that contains both `consumer/...` and `monitor/...`, run the demo in
+`connect` mode instead:
+
+```bash
+bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
+  path/to/your/video.mp4 \
+  --loop \
+  --shm-name rerun_fanout_demo \
+  --rerun-mode connect \
+  --rerun-url rerun+http://host.docker.internal:9876/proxy
+```
+
+In `connect` mode, the demo generates one shared `recording_id` and uses it for both the consumer and the monitor,
+so a single host Rerun instance can show both streams on the same timeline.
+
 What you should see:
 
 * the producer publishes frames at the source video's FPS
 * the consumer viewer advances at about 5 Hz because it is intentionally throttled
 * the monitor viewer updates at the full source rate because it passively observes every produced frame it can validate
-* both viewers come from the same producer, but only the consumer participates in the producer/consumer handshake
+* both streams come from the same producer, but only the consumer participates in the producer/consumer handshake
+* in `connect` mode, consumer and monitor land in one Rerun recording so you can compare them on one timeline
 
 ### Option C: Cross-Language Stream
 This demonstrates that the shared memory protocol is identical across languages.
