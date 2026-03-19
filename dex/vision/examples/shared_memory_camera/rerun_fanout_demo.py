@@ -115,12 +115,67 @@ def get_video_fps(cap: cv2.VideoCapture) -> float:
     return DEFAULT_VIDEO_FPS
 
 
+def build_blueprint(
+    rrb: ModuleType,
+    args: argparse.Namespace,
+    role: str,
+    monitor_index: int | None,
+) -> object:
+    """Build a Rerun blueprint for either a single-process stream or the shared connect layout."""
+    time_panel = rrb.TimePanel(
+        timeline="video_time",
+        playback_speed=1.0,
+        play_state="playing",
+    )
+    if args.rerun_mode == "connect":
+        views = [
+            rrb.Spatial2DView(
+                origin="/consumer",
+                name="Consumer",
+            )
+        ]
+        views.extend(
+            rrb.Spatial2DView(
+                origin=f"/monitor_{index}",
+                name=f"Monitor {index}",
+            )
+            for index in range(args.num_monitors)
+        )
+        return rrb.Blueprint(
+            rrb.Grid(
+                *views,
+                grid_columns=3,
+                name="Fanout Streams",
+            ),
+            time_panel,
+            auto_views=False,
+            auto_layout=False,
+        )
+
+    if role == "consumer":
+        return rrb.Blueprint(
+            rrb.Spatial2DView(origin="/consumer", name="Consumer"),
+            time_panel,
+            auto_views=False,
+            auto_layout=False,
+        )
+
+    assert monitor_index is not None
+    return rrb.Blueprint(
+        rrb.Spatial2DView(origin=f"/monitor_{monitor_index}", name=f"Monitor {monitor_index}"),
+        time_panel,
+        auto_views=False,
+        auto_layout=False,
+    )
+
+
 def initialize_rerun(
     application_id: str,
     args: argparse.Namespace,
     role: str,
     *,
     send_blueprint: bool,
+    monitor_index: int | None = None,
     grpc_port: int | None = None,
 ) -> ModuleType:
     """Initialize a Rerun recording stream in either per-process serve or shared connect mode."""
@@ -133,15 +188,7 @@ def initialize_rerun(
     if send_blueprint:
         rrb = importlib.import_module("rerun.blueprint")
         rr.send_blueprint(
-            rrb.Blueprint(
-                rrb.TimePanel(
-                    timeline="video_time",
-                    playback_speed=1.0,
-                    play_state="playing",
-                ),
-                auto_views=True,
-                auto_layout=True,
-            ),
+            build_blueprint(rrb, args, role, monitor_index),
             make_active=True,
             make_default=True,
         )
@@ -250,6 +297,7 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
         args,
         "consumer",
         send_blueprint=True,
+        monitor_index=None,
         grpc_port=args.consumer_grpc_port,
     )
 
@@ -297,6 +345,7 @@ def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Even
         args,
         "monitor",
         send_blueprint=args.rerun_mode == "serve",
+        monitor_index=monitor_index,
         grpc_port=grpc_port,
     )
 
