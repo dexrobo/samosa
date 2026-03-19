@@ -49,17 +49,17 @@ Watch the stream (and optionally visualize in Rerun):
 bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_video_stream
 ```
 
-### Option B2: Python Fanout Demo With Consumer + Monitor
-This launches three Python processes:
+### Option B2: Python Fanout Demo With Consumer + N Monitors
+This launches:
 
 1. a producer that streams a video file into shared memory at the source video's frame rate
 2. a normal shared-memory consumer that logs to a Rerun gRPC service at 5 Hz
-3. a passive monitor that logs to a second Rerun gRPC service at the full source video rate
+3. one or more passive monitors that log at the full source video rate
 
 The demo supports two mutually exclusive Rerun output modes:
 
-* `--rerun-mode serve`: start two local gRPC services, one for the consumer and one for the monitor
-* `--rerun-mode connect`: connect both the consumer and the monitor to one existing Rerun endpoint using a shared recording id
+* `--rerun-mode serve`: start one local gRPC service for the consumer and one local gRPC service per monitor
+* `--rerun-mode connect`: connect the consumer and all monitors to one existing Rerun endpoint using a shared recording id
 
 Run the default `serve` mode like this:
 
@@ -70,15 +70,19 @@ bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
   --shm-name rerun_fanout_demo \
   --rerun-mode serve \
   --consumer-grpc-port 9876 \
-  --monitor-grpc-port 9877
+  --monitor-grpc-port 9877 \
+  --num-monitors 2
 ```
 
-Then connect two viewers:
+Then connect one consumer viewer and one viewer per monitor:
 
 ```bash
 rerun rerun+http://127.0.0.1:9876/proxy
 rerun rerun+http://127.0.0.1:9877/proxy
+rerun rerun+http://127.0.0.1:9878/proxy
 ```
+
+In `serve` mode, monitor `i` uses port `--monitor-grpc-port + i`.
 
 If you want one host-side Rerun recording that contains both `consumer/...` and `monitor/...`, run the demo in
 `connect` mode instead:
@@ -89,19 +93,21 @@ bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
   --loop \
   --shm-name rerun_fanout_demo \
   --rerun-mode connect \
+  --num-monitors 3 \
   --rerun-url rerun+http://host.docker.internal:9876/proxy
 ```
 
-In `connect` mode, the demo generates one shared `recording_id` and uses it for both the consumer and the monitor,
-so a single host Rerun instance can show both streams on the same timeline.
+In `connect` mode, the demo generates one shared `recording_id` and uses it for the consumer and every monitor,
+so a single host Rerun instance can show all streams on the same timeline. Monitor entities are logged as
+`monitor_0/...`, `monitor_1/...`, and so on.
 
 What you should see:
 
 * the producer publishes frames at the source video's FPS
 * the consumer viewer advances at about 5 Hz because it is intentionally throttled
-* the monitor viewer updates at the full source rate because it passively observes every produced frame it can validate
+* each monitor viewer updates at the full source rate because it passively observes every produced frame it can validate
 * both streams come from the same producer, but only the consumer participates in the producer/consumer handshake
-* in `connect` mode, consumer and monitor land in one Rerun recording so you can compare them on one timeline
+* in `connect` mode, the consumer and all monitors land in one Rerun recording so you can compare them on one timeline
 
 ### Option C: Cross-Language Stream
 This demonstrates that the shared memory protocol is identical across languages.

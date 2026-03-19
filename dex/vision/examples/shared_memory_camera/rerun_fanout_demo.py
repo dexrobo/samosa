@@ -1,11 +1,10 @@
-"""Fan out a video stream to both a throttled consumer and a source-rate monitor.
+"""Fan out a video stream to a throttled consumer and one or more source-rate monitors.
 
-This example launches three Python processes:
+This example launches:
 
 1. A producer that streams video frames into shared memory at the source video's frame rate.
 2. A normal shared-memory consumer that reads the stream and logs to a Rerun gRPC server at 5 Hz.
-3. A passive shared-memory monitor that samples the same stream and logs to a second Rerun gRPC server
-   at the full source frame rate.
+3. N passive shared-memory monitors that sample the same stream and log at the full source frame rate.
 """
 
 from __future__ import annotations
@@ -122,6 +121,7 @@ def initialize_rerun(
     role: str,
     *,
     send_blueprint: bool,
+    grpc_port: int | None = None,
 ) -> ModuleType:
     """Initialize a Rerun recording stream in either per-process serve or shared connect mode."""
     rr = import_rerun()
@@ -156,7 +156,8 @@ def initialize_rerun(
         )
         return rr
 
-    grpc_port = args.consumer_grpc_port if role == "consumer" else args.monitor_grpc_port
+    if grpc_port is None:
+        grpc_port = args.consumer_grpc_port
     server_uri = rr.serve_grpc(grpc_port=grpc_port, server_memory_limit="256MB")
     LOGGER.info("Rerun gRPC server for %s listening at %s", application_id, server_uri)
     return rr
@@ -249,6 +250,7 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
         args,
         "consumer",
         send_blueprint=True,
+        grpc_port=args.consumer_grpc_port,
     )
 
     try:
@@ -284,25 +286,34 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
         next_emit_time = now + emit_period_sec
 
 
-def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Event) -> None:
-    """Passively monitor the producer-written stream and publish to a separate Rerun server."""
+def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Event, monitor_index: int) -> None:
+    """Passively monitor the producer-written stream and publish to a monitor-specific Rerun output."""
+    application_id = f"shared_memory_monitor_rerun_{monitor_index}"
+    entity_path = f"monitor_{monitor_index}/image"
+    grpc_port = args.monitor_grpc_port + monitor_index
     configure_logging()
     rr = initialize_rerun(
-        "shared_memory_monitor_rerun",
+        application_id,
         args,
         "monitor",
         send_blueprint=args.rerun_mode == "serve",
+        grpc_port=grpc_port,
     )
 
     try:
         monitor = wait_for_valid_endpoint(shm.Monitor, args.shm_name, "monitor")
     except RuntimeError:
-        LOGGER.exception("Monitor could not attach to shared memory")
+        LOGGER.exception("Monitor %d could not attach to shared memory", monitor_index)
         return
 
     frame_buffer = shm.CameraFrameBuffer()
     last_frame_id = -1
-    LOGGER.info("Monitor attached to %s at source rate", args.shm_name)
+    LOGGER.info(
+        "Monitor %d attached to %s at source rate%s",
+        monitor_index,
+        args.shm_name,
+        f" via port {grpc_port}" if args.rerun_mode == "serve" else "",
+    )
 
     while not stop_event.is_set():
         if not monitor.read_into(frame_buffer, timeout_sec=args.monitor_timeout_sec):
@@ -311,7 +322,7 @@ def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Even
             continue
 
         last_frame_id = frame_buffer.frame_id
-        log_frame(rr, "monitor/image", frame_buffer)
+        log_frame(rr, entity_path, frame_buffer)
 
 
 def stop_children(stop_event: mp.synchronize.Event) -> None:
@@ -332,7 +343,18 @@ def parse_args() -> argparse.Namespace:
         help="Serve two local Rerun gRPC endpoints, or connect both streams into one existing Rerun recording.",
     )
     parser.add_argument("--consumer-grpc-port", type=int, default=9876, help="Rerun gRPC port for consumer output")
-    parser.add_argument("--monitor-grpc-port", type=int, default=9877, help="Rerun gRPC port for monitor output")
+    parser.add_argument(
+        "--monitor-grpc-port",
+        type=int,
+        default=9877,
+        help="Base Rerun gRPC port for monitor outputs in serve mode. Monitor i uses port base+i.",
+    )
+    parser.add_argument(
+        "--num-monitors",
+        type=int,
+        default=1,
+        help="Number of passive monitor processes to launch.",
+    )
     parser.add_argument(
         "--rerun-url",
         default=DEFAULT_RERUN_CONNECT_URL,
@@ -351,6 +373,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--loop", action="store_true", help="Loop the source video forever")
     args = parser.parse_args()
+    if args.num_monitors < 0:
+        parser.error("--num-monitors must be non-negative")
     if args.rerun_mode == "connect" and not args.rerun_url:
         parser.error("--rerun-url is required when --rerun-mode=connect")
     return args
@@ -376,22 +400,33 @@ def main() -> None:
     workers = [
         mp.Process(target=producer_main, name="producer", args=(args, stop_event)),
         mp.Process(target=consumer_rerun_main, name="consumer-rerun", args=(args, stop_event)),
-        mp.Process(target=monitor_rerun_main, name="monitor-rerun", args=(args, stop_event)),
     ]
+    for monitor_index in range(args.num_monitors):
+        workers.append(
+            mp.Process(
+                target=monitor_rerun_main,
+                name=f"monitor-rerun-{monitor_index}",
+                args=(args, stop_event, monitor_index),
+            )
+        )
 
     for worker in workers:
         worker.start()
 
     if args.rerun_mode == "serve":
-        LOGGER.info(
-            "Connect viewers to rerun+http://127.0.0.1:%d/proxy (consumer) "
-            "and rerun+http://127.0.0.1:%d/proxy (monitor)",
-            args.consumer_grpc_port,
-            args.monitor_grpc_port,
-        )
+        monitor_ports = [args.monitor_grpc_port + monitor_index for monitor_index in range(args.num_monitors)]
+        LOGGER.info("Connect consumer viewer to rerun+http://127.0.0.1:%d/proxy", args.consumer_grpc_port)
+        if monitor_ports:
+            LOGGER.info(
+                "Connect monitor viewers to: %s",
+                ", ".join(f"rerun+http://127.0.0.1:{port}/proxy" for port in monitor_ports),
+            )
+        else:
+            LOGGER.info("No monitor viewers requested (--num-monitors=0)")
     else:
         LOGGER.info(
-            "Consumer and monitor will stream into %s with shared recording_id=%s",
+            "Consumer and %d monitor(s) will stream into %s with shared recording_id=%s",
+            args.num_monitors,
             args.rerun_url,
             args.rerun_recording_id,
         )
