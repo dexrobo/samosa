@@ -2,6 +2,7 @@
 #define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
 
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string_view>
 
@@ -73,7 +74,8 @@ class Monitor {
   explicit Monitor(const std::string_view shared_memory_name)
       : shared_memory_buffer_(SharedMemoryBuffer::Open(
             shared_memory_name, ValidateBuffer<Buffer, buffer_size, StreamingSharedMemoryBuffer>)),
-        streaming_control_{StreamingControl::Instance()} {}
+        streaming_control_{StreamingControl::Instance()},
+        buffer_cache_(std::make_unique<Buffer>()) {}
 
   /**
    * @brief Checks if the monitor is valid and connected to shared memory.
@@ -148,6 +150,7 @@ class Monitor {
 
   SharedMemoryBuffer shared_memory_buffer_;
   std::reference_wrapper<StreamingControl> streaming_control_;
+  mutable std::unique_ptr<Buffer> buffer_cache_;
 };
 
 }  // namespace dex::shared_memory

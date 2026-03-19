@@ -314,7 +314,6 @@ def consumer_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Eve
         "shared_memory_consumer_rerun",
         args,
         "consumer",
-        send_blueprint=True,
         monitor_index=None,
         grpc_port=args.consumer_grpc_port,
     )
@@ -362,7 +361,6 @@ def monitor_rerun_main(args: argparse.Namespace, stop_event: mp.synchronize.Even
         application_id,
         args,
         "monitor",
-        send_blueprint=args.rerun_mode == "serve",
         monitor_index=monitor_index,
         grpc_port=grpc_port,
     )

@@ -169,6 +169,36 @@ TEST_F(SharedMemoryMonitorTest, ReadIntoCopiesValidatedSnapshotAndReportsSequenc
   EXPECT_EQ(sequence, 7);
 }
 
+TEST_F(SharedMemoryMonitorTest, GetLatestBufferKeepsScratchStoragePerMonitorInstance) {
+  const std::string other_shared_memory_name = shared_memory_name_ + "_other";
+  auto shared_memory_a = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
+      shared_memory_name_, InitializeBuffer<test::ArrayBuffer>);
+  auto shared_memory_b = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
+      other_shared_memory_name, InitializeBuffer<test::ArrayBuffer>);
+  ASSERT_TRUE(shared_memory_a.IsValid());
+  ASSERT_TRUE(shared_memory_b.IsValid());
+
+  SetPublishedSnapshot(shared_memory_a, detail::BufferState::BufferA, 1, "monitor-a");
+  SetPublishedSnapshot(shared_memory_b, detail::BufferState::BufferA, 1, "monitor-b");
+
+  Monitor<test::ArrayBuffer> monitor_a{shared_memory_name_};
+  Monitor<test::ArrayBuffer> monitor_b{other_shared_memory_name};
+  ASSERT_TRUE(monitor_a.IsValid());
+  ASSERT_TRUE(monitor_b.IsValid());
+
+  auto buffer_a = monitor_a.GetLatestBuffer(0.1, MonitorReadMode::WaitForStableSnapshot);
+  ASSERT_TRUE(buffer_a.has_value());
+  EXPECT_EQ(std::string(buffer_a->get().data()), "monitor-a");
+
+  auto buffer_b = monitor_b.GetLatestBuffer(0.1, MonitorReadMode::WaitForStableSnapshot);
+  ASSERT_TRUE(buffer_b.has_value());
+  EXPECT_EQ(std::string(buffer_b->get().data()), "monitor-b");
+
+  EXPECT_EQ(std::string(buffer_a->get().data()), "monitor-a");
+
+  (void)SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(other_shared_memory_name);
+}
+
 TEST_F(SharedMemoryMonitorTest, SkipDuringWrite) {
   // Create shared memory
   auto shared_memory = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(

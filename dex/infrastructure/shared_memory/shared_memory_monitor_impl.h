@@ -205,11 +205,10 @@ template <typename Buffer, size_t buffer_size, template <typename, size_t> typen
   requires detail::StreamingSharedMemoryBufferType<Buffer, buffer_size, SharedMemoryBuffer>
 auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::GetLatestBuffer(double timeout_sec, MonitorReadMode read_mode)
     -> std::optional<std::reference_wrapper<const Buffer>> {
-  thread_local auto buffer_cache = std::make_unique<Buffer>();
-  if (!ReadInto(*buffer_cache, timeout_sec, read_mode)) {
+  if (!ReadInto(*buffer_cache_, timeout_sec, read_mode)) {
     return std::nullopt;
   }
-  return std::cref(*buffer_cache);
+  return std::cref(*buffer_cache_);
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
