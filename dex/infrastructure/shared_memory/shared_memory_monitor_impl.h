@@ -3,6 +3,7 @@
 
 #include <chrono>
 #include <cmath>  // For std::modf
+#include <cstdlib>
 #include <memory>
 
 #include "spdlog/spdlog.h"
@@ -79,19 +80,21 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::HandleInitialState(
     return InitialStateAction::Continue;
   }
 
-  if (read_mode == MonitorReadMode::SkipIfBusy) {
-    SPDLOG_DEBUG("Monitor: Skipping read because producer write is already active");
-    return InitialStateAction::ReturnNone;
+  switch (read_mode) {
+    case MonitorReadMode::SkipIfBusy:
+      SPDLOG_DEBUG("Monitor: Skipping read because producer write is already active");
+      return InitialStateAction::ReturnNone;
+    case MonitorReadMode::WaitForStableSnapshot:
+      if (!WaitForMonitorStateChange(initial_packed, deadline)) {
+        return InitialStateAction::ReturnNone;
+      }
+      return InitialStateAction::Retry;
+    case MonitorReadMode::Opportunistic:
+      // Best-effort path: attempt an immediate read and rely on post-copy validation to reject overlap.
+      return InitialStateAction::Continue;
   }
 
-  if (read_mode != MonitorReadMode::WaitForStableSnapshot) {
-    return InitialStateAction::Continue;
-  }
-
-  if (!WaitForMonitorStateChange(initial_packed, deadline)) {
-    return InitialStateAction::ReturnNone;
-  }
-  return InitialStateAction::Retry;
+  std::abort();
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
@@ -120,15 +123,22 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::SelectCandidateSlot(
     return CandidateSlot{.raw_slot_id = raw_slot_id, .slot_index = slot_index, .pre_slot_packed = pre_slot_packed};
   }
 
-  if (read_mode == MonitorReadMode::SkipIfBusy) {
-    return std::nullopt;
+  switch (read_mode) {
+    case MonitorReadMode::SkipIfBusy:
+      return std::nullopt;
+    case MonitorReadMode::WaitForStableSnapshot:
+      if (WaitForMonitorStateChange(initial_packed, deadline)) {
+        return CandidateSlot{.raw_slot_id = static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable)),
+                             .slot_index = 0,
+                             .pre_slot_packed = detail::kNoCompletedMonitorSequence};
+      }
+      return std::nullopt;
+    case MonitorReadMode::Opportunistic:
+      // Best-effort path: do not wait for the slot to stabilize.
+      return std::nullopt;
   }
-  if (read_mode == MonitorReadMode::WaitForStableSnapshot && WaitForMonitorStateChange(initial_packed, deadline)) {
-    return CandidateSlot{.raw_slot_id = static_cast<uint32_t>(detail::ToInt(detail::BufferState::Unavailable)),
-                         .slot_index = 0,
-                         .pre_slot_packed = detail::kNoCompletedMonitorSequence};
-  }
-  return std::nullopt;
+
+  std::abort();
 }
 
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>

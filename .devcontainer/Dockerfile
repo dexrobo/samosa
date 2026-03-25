@@ -3,7 +3,7 @@ FROM ubuntu:jammy
 # Avoid prompts during apt-get
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install dependencies and Bazelisk in a single layer
+# Install dependencies, Bazelisk & llvm/clangd in a single layer
 RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
@@ -17,9 +17,13 @@ RUN apt-get update && apt-get install -y \
     libxml2 \
     libglib2.0-0 \
     sudo \
+    lsb-release \
+    software-properties-common \
     && ARCH=$(dpkg --print-architecture) && \
     curl -Lo /usr/local/bin/bazel "https://github.com/bazelbuild/bazelisk/releases/download/v1.19.0/bazelisk-linux-${ARCH}" && \
     chmod +x /usr/local/bin/bazel \
+    && curl -sSL https://apt.llvm.org/llvm.sh /tmp/llvm.sh && chmod a+x /tmp/llvm.sh && /tmp/llvm.sh 21 \
+    && ln -s /usr/bin/clangd-21 /usr/bin/clangd \
     && rm -rf /var/lib/apt/lists/*
 
 # Create a non-root user

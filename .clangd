@@ -1,6 +1,18 @@
 CompileFlags:
-  Add: [-ferror-limit=0, -Wno-missing-designated-field-initializers]
+  Add:
+    - -ferror-limit=0
+    - -Wno-missing-designated-field-initializers
   BuiltinHeaders: QueryDriver
-  CompilationDatabase: ${workspaceFolder}/
+
+Index:
+  Background: Build
+
+Diagnostics:
+  # Matches your .clang-tidy which disables misc-include-cleaner
+  UnusedIncludes: None
+  MissingIncludes: None
+  # Suppress the preamble error that often occurs in headers with complex include chains
+  Suppress: [pp_including_mainfile_in_preamble]
+
 Completion:
   HeaderInsertion: Never

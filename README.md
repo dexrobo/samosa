@@ -189,6 +189,32 @@ To visualize data on your host while the consumer runs inside Docker:
 ### 4. VS Code Integration
 If you use VS Code, you can skip the manual commands by using the **Dev Containers** extension. Simply open the project and select **"Reopen in Container"**.
 
+### 5. IDE Tooling
+For `clangd`, generate a fresh workspace-root `compile_commands.json` from Bazel metadata:
+
+```bash
+docker exec -it samosa-dev bazel run //:refresh_compile_commands
+```
+
+If you normally develop with extra Bazel flags, pass them after `--` so the compilation database matches your real build:
+
+```bash
+docker exec -it samosa-dev bazel run //:refresh_compile_commands -- --config=dbg
+```
+
+For Python editor support, create a workspace-root `.venv` from the same `requirements.txt` used by Bazel's Python dependency setup:
+
+```bash
+docker exec -it samosa-dev bazel run //:python_venv
+```
+
+That command creates `.venv` in the workspace root by default. To recreate it from scratch or place it elsewhere:
+
+```bash
+docker exec -it samosa-dev bazel run //:python_venv -- --recreate
+docker exec -it samosa-dev bazel run //:python_venv -- /tmp/samosa-venv
+```
+
 ## Performance & Benchmarking
 
 Samosa includes a specialized benchmarking tool to measure end-to-end latency and frame-skip statistics under various loads.

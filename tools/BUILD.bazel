@@ -1,3 +1,4 @@
+load("@rules_python//python:defs.bzl", "py_binary")
 load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 package(default_visibility = ["//visibility:public"])
@@ -9,4 +10,11 @@ sh_binary(
         "//tools/format",
         "//tools/lint:mypy",
     ],
+)
+
+py_binary(
+    name = "create_python_venv",
+    srcs = ["create_python_venv.py"],
+    main = "create_python_venv.py",
+    python_version = "PY3",
 )

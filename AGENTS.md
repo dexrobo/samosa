@@ -10,26 +10,27 @@ These instructions apply to the whole repository unless a deeper `AGENTS.md` ove
 
 * Run all `bazel` commands inside the devcontainer, not on the host.
 * Run code execution that depends on the repo toolchain or Linux kernel behavior inside the devcontainer.
+* **Check if you are already in a devcontainer**: If you are already running inside the container (e.g., `test -f /.dockerenv` is true), run commands directly. Do not use `docker exec` from within the container.
 * The expected live container name is `samosa-dev`.
-* Preferred pattern:
+* Preferred pattern (if on host):
 
 ```bash
 docker exec -it samosa-dev bazel test //path/to:target
 ```
 
-* For an interactive shell:
+* For an interactive shell (if on host):
 
 ```bash
 docker exec -it samosa-dev bash
 ```
 
-* If the container is stopped, start it with:
+* If the container is stopped (if on host), start it with:
 
 ```bash
 docker start samosa-dev
 ```
 
-Refer to [README.md](/Volumes/Studio/github/samosa/README.md) for the canonical devcontainer setup.
+Refer to [README.md](./README.md) for the canonical devcontainer setup.
 
 ## Platform Support
 
@@ -39,12 +40,8 @@ Refer to [README.md](/Volumes/Studio/github/samosa/README.md) for the canonical 
 
 ## Build And Verification
 
-* Before finishing a code change, run the smallest relevant Bazel test target(s) in `samosa-dev`.
-* For broader validation, use:
-
-```bash
-docker exec -it samosa-dev bazel run check -- all
-```
+* Before finishing a code change, run the smallest relevant Bazel test target(s) inside the devcontainer.
+* For broader validation, use `bazel run check -- all` (prepending `docker exec -it samosa-dev` only if on host).
 
 * If a change touches concurrency, shared memory, synchronization, or hot paths, prefer targeted tests first and then run broader verification when practical.
 
