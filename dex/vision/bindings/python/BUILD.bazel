@@ -8,6 +8,7 @@ nanobind_extension(
     srcs = ["dex/vision/shared_memory/_bindings.cc"],
     deps = [
         "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_monitor",
         "//dex/infrastructure/shared_memory:shared_memory_streaming",
     ],
 )

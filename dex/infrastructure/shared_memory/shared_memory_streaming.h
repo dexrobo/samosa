@@ -5,6 +5,8 @@
 #include <csignal>  // for signal, SIGINT, SIGTERM
 #include <experimental/memory>
 
+#include "spdlog/spdlog.h"
+
 #include "dex/infrastructure/shared_memory/futex.h"
 #include "dex/infrastructure/shared_memory/shared_memory.h"
 #include "dex/infrastructure/shared_memory/streaming_control.h"
@@ -21,7 +23,8 @@ enum class RunResult {
 
 namespace detail {
 
-static constexpr uint32_t kSharedMemVersion = 1;
+static constexpr uint32_t kSharedMemVersion = 2;
+static constexpr uint32_t kNoCompletedMonitorSequence = 0;
 
 // Concept for shared memory used in streaming applications
 template <typename Buffer, size_t buffer_size, template <typename, size_t> typename SharedMemoryBuffer>
@@ -47,6 +50,7 @@ concept ConsumerFunction = ::std::invocable<F, const Buffer&> || ::std::invocabl
 
 constexpr uint32_t kWritingBitMask = 1U << 31;        // Highest bit indicates writing
 constexpr uint32_t kSequenceMask = ~kWritingBitMask;  // All bits except highest (31 bits for sequence)
+constexpr uint32_t kSequenceComparisonWindow = (kSequenceMask + 1U) >> 1;
 
 // Extract sequence from packed value
 inline uint32_t GetSequence(const uint32_t packed_value) { return packed_value & kSequenceMask; }
@@ -57,6 +61,21 @@ inline bool IsWriting(const uint32_t packed_value) { return (packed_value & kWri
 // Create packed value from sequence and writing flag
 inline uint32_t PackSequenceAndWriting(const uint32_t sequence, const bool is_writing) {
   return (sequence & kSequenceMask) | (is_writing ? kWritingBitMask : 0);
+}
+
+// Returns true when `candidate` is a newer published monitor sequence than `reference`.
+// Comparisons are wrap-safe within half of the 31-bit sequence space, which is far larger
+// than any realistic backlog between observed samples.
+inline bool IsNewerSequence(const uint32_t candidate, const uint32_t reference) {
+  if (candidate == kNoCompletedMonitorSequence) {
+    return false;
+  }
+  if (reference == kNoCompletedMonitorSequence) {
+    return true;
+  }
+
+  const uint32_t delta = (candidate - reference) & kSequenceMask;
+  return delta != 0 && delta < kSequenceComparisonWindow;
 }
 
 }  // namespace detail
@@ -77,6 +96,12 @@ using std::experimental::observer_ptr;
  * - Unavailable (0): Initial state, no valid data
  * - BufferA (1): Buffer A contains the latest data
  * - BufferB (2): Buffer B contains the latest data
+ *
+ * Monitoring metadata:
+ * - `sequence_and_writing` is monitor-facing metadata only. It does not participate in
+ *   producer/consumer ownership.
+ * - `slot_sequence_and_writing` tracks write progress for each slot so passive monitors can
+ *   validate the exact slot they copied.
  */
 template <typename Buffer, size_t buffer_size = 2>
 struct LockFreeSharedMemoryBuffer {
@@ -86,7 +111,8 @@ struct LockFreeSharedMemoryBuffer {
   std::atomic<uint32_t> write_index;           // Current buffer available for consumer to read
   std::atomic<uint32_t> last_written_buffer;   // Which buffer was last written to
   uint32_t version{};                          // Shared memory format version
-  std::array<Buffer, buffer_size> buffers;     // Array of shared memory buffers
+  std::array<std::atomic<uint32_t>, buffer_size> slot_sequence_and_writing;  // Monitor-only per-slot validation
+  std::array<Buffer, buffer_size> buffers;                                   // Array of shared memory buffers
 };
 
 template <typename Buffer, size_t buffer_size = 2,
@@ -114,8 +140,13 @@ template <typename Buffer, size_t buffer_size = 2,
     return nullptr;
   }
 
-  auto latest_buffer_id = ToBufferState(shared_memory.Get()->last_written_buffer.load(std::memory_order_acquire));
-  return GetBufferByState(shared_memory, latest_buffer_id);
+  const auto latest_buffer_id = shared_memory.Get()->last_written_buffer.load(std::memory_order_acquire);
+  if (latest_buffer_id < ToInt(BufferState::Unavailable) || latest_buffer_id > ToInt(BufferState::BufferStateLast)) {
+    SPDLOG_WARN("Invalid last_written_buffer value {}", latest_buffer_id);
+    return nullptr;
+  }
+
+  return GetBufferByState(shared_memory, static_cast<BufferState>(latest_buffer_id));
 }
 
 }  // namespace detail

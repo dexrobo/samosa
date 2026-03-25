@@ -44,3 +44,15 @@ py_binary(
         "@python_deps//rerun_sdk",
     ],
 )
+
+py_binary(
+    name = "rerun_fanout_demo_py",
+    srcs = ["rerun_fanout_demo.py"],
+    main = "rerun_fanout_demo.py",
+    deps = [
+        "//dex/vision/bindings/python:shared_memory",
+        "@python_deps//numpy",
+        "@python_deps//opencv_python_headless",
+        "@python_deps//rerun_sdk",
+    ],
+)

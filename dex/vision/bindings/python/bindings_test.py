@@ -102,6 +102,47 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
         # Final cleanup
         shm.destroy_shared_memory(shm_name)
 
+    def test_monitor_reads_latest_snapshot(self) -> None:
+        """Verify that the Python monitor can passively sample the latest producer-written snapshot."""
+        shm_name = "test_shm_monitor"
+
+        shm.destroy_shared_memory(shm_name)
+        ctrl = shm.StreamingControl.instance()
+        ctrl.reset()
+
+        assert shm.initialize_shared_memory(shm_name)
+
+        write_buffer = shm.CameraFrameBuffer()
+        write_buffer.frame_id = 456
+        write_buffer.color_width = 32
+        write_buffer.color_height = 16
+        write_buffer.color_image_size = 32 * 16 * 3
+        write_buffer.camera_name = "MonitorCamera"
+        test_pattern = np.arange(write_buffer.color_image_size, dtype=np.uint8)
+        write_buffer.color_image_bytes[: write_buffer.color_image_size] = test_pattern
+
+        producer = shm.Producer(shm_name)
+        monitor = shm.Monitor(shm_name)
+        assert producer.is_valid()
+        assert monitor.is_valid()
+
+        producer.write(write_buffer)
+
+        dst = shm.CameraFrameBuffer()
+        found = monitor.read_into(dst, 0.1, shm.MonitorReadMode.WaitForStableSnapshot)
+        assert found
+        assert dst.frame_id == 456
+        assert dst.camera_name == "MonitorCamera"
+
+        dst_pattern = np.array(dst.color_image_bytes[: dst.color_image_size])
+        np.testing.assert_array_equal(dst_pattern, test_pattern)
+
+        monitored = monitor.read(0.1, shm.MonitorReadMode.Opportunistic)
+        assert monitored is not None
+        assert monitored.frame_id == 456
+
+        shm.destroy_shared_memory(shm_name)
+
 
 if __name__ == "__main__":
     unittest.main()

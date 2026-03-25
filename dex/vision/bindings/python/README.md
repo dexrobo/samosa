@@ -4,7 +4,7 @@ This library provides high-performance Python bindings for the C++ lock-free sha
 
 ## Overview
 
-The bindings bridge the gap between the low-latency C++ `dex::shared_memory` system and the Python ecosystem (NumPy, OpenCV, Rerun). They enable Python applications to act as either producers or consumers of high-bandwidth video data with minimal overhead.
+The bindings bridge the gap between the low-latency C++ `dex::shared_memory` system and the Python ecosystem (NumPy, OpenCV, Rerun). They enable Python applications to act as producers, consumers, or passive monitors of high-bandwidth video data with minimal overhead.
 
 ## Implementation Details
 
@@ -26,6 +26,8 @@ The bindings bridge the gap between the low-latency C++ `dex::shared_memory` sys
 | `std::array<char, 64>` | `str` | Automatic conversion between null-terminated C-strings and Python strings. |
 | `Producer<Buffer>` | `shm.Producer` | Binding for the C++ Producer template. |
 | `Consumer<Buffer>` | `shm.Consumer` | Binding for the C++ Consumer template. |
+| `Monitor<Buffer>` | `shm.Monitor` | Passive monitor for producer-written snapshots. |
+| `MonitorReadMode` | `shm.MonitorReadMode` | Monitor policy enum (`SkipIfBusy`, `WaitForStableSnapshot`, `Opportunistic`). |
 | `RunResult` | `shm.RunResult` | Enum (Success, Stopped, Timeout, Error). |
 | `kMaxWidth` / `kMaxHeight` | `shm.MAX_WIDTH` / `MAX_HEIGHT` | Constants synced from C++ `dex::camera`. |
 
@@ -117,6 +119,47 @@ while True:
     frame.frame_id += 1
     time.sleep(1/60)
 ```
+
+### Monitor (Passive Observer)
+```python
+import dex.vision.shared_memory as shm
+import numpy as np
+
+monitor = shm.Monitor("camera_stream")
+frame = shm.CameraFrameBuffer()
+
+if monitor.read_into(frame, 0.1, shm.MonitorReadMode.WaitForStableSnapshot):
+    image = np.array(frame.color_image_bytes[:frame.color_image_size]).reshape(
+        (frame.color_height, frame.color_width, 3)
+    )
+    print(f"Observed frame {frame.frame_id}")
+```
+
+Prefer `monitor.read_into(...)` for repeated reads:
+
+* it reuses caller-owned storage
+* it avoids allocating a new `CameraFrameBuffer` on each successful read
+* it is the preferred API for loops and long-running monitoring
+
+`monitor.read(...)` is still available as a convenience wrapper when you want the simplest possible call shape:
+
+```python
+frame = monitor.read(0.1, shm.MonitorReadMode.WaitForStableSnapshot)
+if frame is not None:
+    print(f"Observed frame {frame.frame_id}")
+```
+
+Use monitor modes like this:
+
+* `shm.MonitorReadMode.SkipIfBusy`: conservative, no waiting
+* `shm.MonitorReadMode.WaitForStableSnapshot`: strongest validated snapshot within a timeout budget
+* `shm.MonitorReadMode.Opportunistic`: try immediately, but still discard suspicious overlap
+
+`Monitor` is passive:
+
+* it does not participate in the producer/consumer ownership handshake
+* it may skip frames
+* it aims to return validated whole snapshots rather than knowingly return partial data
 
 ## Benchmarking
 
