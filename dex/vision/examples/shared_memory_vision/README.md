@@ -24,29 +24,29 @@ The example uses `CameraFrameBuffer` (defined in `dex/drivers/camera/base/types.
 
 First, build all targets:
 ```bash
-bazel build //dex/vision/examples/shared_memory_camera/...
+bazel build //dex/vision/examples/shared_memory_vision/...
 ```
 
 ### Option A: Pure C++ Stream
 Run the producer in one terminal:
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:camera_producer_cc -- my_camera_stream 30
+bazel run //dex/vision/examples/shared_memory_vision:camera_producer_cc -- my_camera_stream 30
 ```
 
 Run the consumer in another terminal:
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_cc -- my_camera_stream
+bazel run //dex/vision/examples/shared_memory_vision:camera_consumer_cc -- my_camera_stream
 ```
 
 ### Option B: Pure Python Stream
 Start streaming a video file:
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:video_producer_py -- path/to/your/video.mp4 my_video_stream
+bazel run //dex/vision/examples/shared_memory_vision:video_producer_py -- path/to/your/video.mp4 my_video_stream
 ```
 
 Watch the stream (and optionally visualize in Rerun):
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- my_video_stream
+bazel run //dex/vision/examples/shared_memory_vision:camera_consumer_py -- my_video_stream
 ```
 
 ### Option B2: Python Fanout Demo With Consumer + N Monitors
@@ -64,7 +64,7 @@ The demo supports two mutually exclusive Rerun output modes:
 Run the default `serve` mode like this:
 
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
+bazel run //dex/vision/examples/shared_memory_vision:rerun_fanout_demo_py -- \
   path/to/your/video.mp4 \
   --loop \
   --shm-name rerun_fanout_demo \
@@ -88,7 +88,7 @@ If you want one host-side Rerun recording that contains both `consumer/...` and 
 `connect` mode instead:
 
 ```bash
-bazel run //dex/vision/examples/shared_memory_camera:rerun_fanout_demo_py -- \
+bazel run //dex/vision/examples/shared_memory_vision:rerun_fanout_demo_py -- \
   path/to/your/video.mp4 \
   --loop \
   --shm-name rerun_fanout_demo \
@@ -117,11 +117,11 @@ Generate synthetic data in C++ and visualize it in Python.
 
 * **Start C++ Producer**:
     ```bash
-    bazel run //dex/vision/examples/shared_memory_camera:camera_producer_cc -- cross_lang_1 60
+    bazel run //dex/vision/examples/shared_memory_vision:camera_producer_cc -- cross_lang_1 60
     ```
 * **Start Python Consumer**:
     ```bash
-    bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_py -- cross_lang_1
+    bazel run //dex/vision/examples/shared_memory_vision:camera_consumer_py -- cross_lang_1
     ```
 
 #### 2. Python Producer -> C++ Consumer
@@ -129,11 +129,11 @@ Read a video file in Python and monitor latency in C++.
 
 * **Start Python Producer**:
     ```bash
-    bazel run //dex/vision/examples/shared_memory_camera:video_producer_py -- path/to/video.mp4 cross_lang_2
+    bazel run //dex/vision/examples/shared_memory_vision:video_producer_py -- path/to/video.mp4 cross_lang_2
     ```
 * **Start C++ Consumer**:
     ```bash
-    bazel run //dex/vision/examples/shared_memory_camera:camera_consumer_cc -- cross_lang_2
+    bazel run //dex/vision/examples/shared_memory_vision:camera_consumer_cc -- cross_lang_2
     ```
 
 ## Python Bindings
