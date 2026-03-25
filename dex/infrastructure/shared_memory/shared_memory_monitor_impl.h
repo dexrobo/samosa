@@ -201,7 +201,7 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::CopyLatestSnapshotInto(Bu
     const uint32_t accepted_sequence =
         detail::GetSequence(gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, candidate.slot_index)
                                 .load(std::memory_order_acquire));
-    if (accepted_sequence <= minimum_sequence) {
+    if (!detail::IsNewerSequence(accepted_sequence, minimum_sequence)) {
       return std::nullopt;
     }
 
@@ -260,7 +260,7 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
     const uint32_t current_sequence = detail::GetSequence(packed);
 
     // If there's new data
-    if (current_sequence > last_observed_sequence) {
+    if (detail::IsNewerSequence(current_sequence, last_observed_sequence)) {
       auto accepted_sequence = CopyLatestSnapshotInto(*buffer_cache, timeout_sec, read_mode, last_observed_sequence);
       if (accepted_sequence) {
         detail::InvokeMonitor(monitor_fn, *buffer_cache, *accepted_sequence);
@@ -294,4 +294,3 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 }  // namespace dex::shared_memory
 
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
-
