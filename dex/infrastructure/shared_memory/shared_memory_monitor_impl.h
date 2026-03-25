@@ -294,3 +294,4 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 }  // namespace dex::shared_memory
 
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
+

@@ -704,3 +704,4 @@ TEST_F(SharedMemoryMonitorTest, MonitorRejectsOldSharedMemoryVersion) {
 }
 
 }  // namespace dex::shared_memory
+
