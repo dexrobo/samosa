@@ -324,3 +324,4 @@ class Consumer {
 #include "dex/infrastructure/shared_memory/shared_memory_streaming_impl.h"
 
 #endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
+
