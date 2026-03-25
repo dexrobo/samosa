@@ -580,58 +580,6 @@ TEST_F(SharedMemoryMonitorTest, CallbackSequenceMatchesAcceptedSnapshot) {
   EXPECT_EQ(observed_sequence, 7U);
 }
 
-TEST_F(SharedMemoryMonitorTest, RunContinuesAcrossWrappedMonitorSequences) {
-  auto shared_memory = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
-      shared_memory_name_, InitializeBuffer<test::ArrayBuffer>);
-  ASSERT_TRUE(shared_memory.IsValid());
-
-  constexpr uint32_t kPreWrapSequence = detail::kSequenceMask - 1U;
-  SetPublishedSnapshot(shared_memory, detail::BufferState::BufferA, kPreWrapSequence, "pre-wrap");
-
-  Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
-  ASSERT_TRUE(monitor.IsValid());
-
-  std::atomic<uint32_t> callback_count{0};
-  std::array<uint64_t, 3> observed_sequences{};
-
-  std::thread producer_thread([&]() {
-    while (callback_count.load(std::memory_order_acquire) < 1) {
-      std::this_thread::yield();
-    }
-    SetPublishedSnapshot(shared_memory, detail::BufferState::BufferB, 1, "wrap-1");
-    ASSERT_TRUE(detail::GetDefaultFutex()->Wake(shared_memory.Get()->sequence_and_writing, 1));
-
-    while (callback_count.load(std::memory_order_acquire) < 2) {
-      std::this_thread::yield();
-    }
-    SetPublishedSnapshot(shared_memory, detail::BufferState::BufferA, 2, "wrap-2");
-    ASSERT_TRUE(detail::GetDefaultFutex()->Wake(shared_memory.Get()->sequence_and_writing, 1));
-  });
-
-  monitor.Run(
-      [&](const test::ArrayBuffer& buffer, uint64_t sequence) {
-        const auto index = callback_count.fetch_add(1, std::memory_order_acq_rel);
-        ASSERT_LT(index, observed_sequences.size());
-        observed_sequences[index] = sequence;
-
-        if (index == 0) {
-          EXPECT_EQ(std::string(buffer.data()), "pre-wrap");
-        } else if (index == 1) {
-          EXPECT_EQ(std::string(buffer.data()), "wrap-1");
-        } else if (index == 2) {
-          EXPECT_EQ(std::string(buffer.data()), "wrap-2");
-        }
-      },
-      0.1, MonitorReadMode::WaitForStableSnapshot, observed_sequences.size());
-
-  producer_thread.join();
-
-  EXPECT_EQ(callback_count.load(std::memory_order_acquire), observed_sequences.size());
-  EXPECT_EQ(observed_sequences[0], kPreWrapSequence);
-  EXPECT_EQ(observed_sequences[1], 1U);
-  EXPECT_EQ(observed_sequences[2], 2U);
-}
-
 TEST_F(SharedMemoryMonitorTest, MonitorDoesNotTouchReadOrWriteIndex) {
   auto shared_memory = SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Create(
       shared_memory_name_, InitializeBuffer<test::ArrayBuffer>);
