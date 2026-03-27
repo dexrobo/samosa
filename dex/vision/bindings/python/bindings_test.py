@@ -143,6 +143,74 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
 
         shm.destroy_shared_memory(shm_name)
 
+    def test_calibration_roundtrip(self) -> None:
+        """Verify that per-frame calibration fields survive a Producer -> Monitor roundtrip."""
+        shm_name = "test_shm_calibration"
+
+        shm.destroy_shared_memory(shm_name)
+        ctrl = shm.StreamingControl.instance()
+        ctrl.reset()
+
+        assert shm.initialize_shared_memory(shm_name)
+
+        # Known calibration values
+        intrinsics_k = np.array([500.0, 0.0, 320.0, 0.0, 500.0, 240.0, 0.0, 0.0, 1.0])
+        intrinsics_d = np.array([0.1, -0.2, 0.001, 0.002, 0.05, 0.0, 0.0, 0.0])
+        depth_k = np.array([400.0, 0.0, 320.0, 0.0, 400.0, 240.0, 0.0, 0.0, 1.0])
+        depth_d = np.array([-0.05, 0.1, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+        cam_to_world = np.array([1.0, 0.0, 0.0, 0.5, 0.0, 1.0, 0.0, -0.3, 0.0, 0.0, 1.0, 1.2])
+        depth_to_rgb = np.array([1.0, 0.0, 0.0, 0.015, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0])
+        depth_scale = 0.00025
+        stereo_baseline = 0.063
+
+        write_buffer = shm.CameraFrameBuffer()
+        write_buffer.frame_id = 789
+        write_buffer.color_width = 32
+        write_buffer.color_height = 16
+        write_buffer.color_image_size = 32 * 16 * 3
+
+        # Set calibration fields
+        write_buffer.color_intrinsics_k = intrinsics_k
+        write_buffer.color_intrinsics_d = intrinsics_d
+        write_buffer.depth_intrinsics_k = depth_k
+        write_buffer.depth_intrinsics_d = depth_d
+        write_buffer.cam_to_world_extrinsics = cam_to_world
+        write_buffer.depth_to_rgb_extrinsics = depth_to_rgb
+        write_buffer.cam_to_world_extrinsics_set = True
+        write_buffer.depth_scale = depth_scale
+        write_buffer.stereo_baseline_meters = stereo_baseline
+
+        producer = shm.Producer(shm_name)
+        assert producer.is_valid()
+        producer.write(write_buffer)
+
+        monitor = shm.Monitor(shm_name)
+        assert monitor.is_valid()
+        dst = shm.CameraFrameBuffer()
+        found = monitor.read_into(dst, 0.1, shm.MonitorReadMode.WaitForStableSnapshot)
+        assert found
+        assert dst.frame_id == 789
+
+        # Verify all calibration fields survived the roundtrip
+        np.testing.assert_array_almost_equal(np.array(dst.color_intrinsics_k), intrinsics_k)
+        np.testing.assert_array_almost_equal(np.array(dst.color_intrinsics_d), intrinsics_d)
+        np.testing.assert_array_almost_equal(np.array(dst.depth_intrinsics_k), depth_k)
+        np.testing.assert_array_almost_equal(np.array(dst.depth_intrinsics_d), depth_d)
+        np.testing.assert_array_almost_equal(np.array(dst.cam_to_world_extrinsics), cam_to_world)
+        np.testing.assert_array_almost_equal(np.array(dst.depth_to_rgb_extrinsics), depth_to_rgb)
+        assert dst.cam_to_world_extrinsics_set is True
+        assert abs(dst.depth_scale - depth_scale) < 1e-6
+        assert abs(dst.stereo_baseline_meters - stereo_baseline) < 1e-9
+
+        shm.destroy_shared_memory(shm_name)
+
+    def test_extrinsics_set_defaults_false(self) -> None:
+        """A fresh CameraFrameBuffer should have cam_to_world_extrinsics_set=False."""
+        buffer = shm.CameraFrameBuffer()
+        assert buffer.cam_to_world_extrinsics_set is False
+        assert buffer.depth_scale == 0.0
+        assert buffer.stereo_baseline_meters == 0.0
+
 
 if __name__ == "__main__":
     unittest.main()
