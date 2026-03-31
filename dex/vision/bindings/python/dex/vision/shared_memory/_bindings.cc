@@ -161,8 +161,7 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
             std::memcpy(buffer.cam_to_world_extrinsics.data(), data.data(),
-                        std::min(buffer.cam_to_world_extrinsics.size() * sizeof(double),
-                                 data.size() * sizeof(double)));
+                        std::min(buffer.cam_to_world_extrinsics.size() * sizeof(double), data.size() * sizeof(double)));
           })
       .def_prop_rw(
           "depth_to_rgb_extrinsics",
@@ -172,8 +171,7 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           },
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
             std::memcpy(buffer.depth_to_rgb_extrinsics.data(), data.data(),
-                        std::min(buffer.depth_to_rgb_extrinsics.size() * sizeof(double),
-                                 data.size() * sizeof(double)));
+                        std::min(buffer.depth_to_rgb_extrinsics.size() * sizeof(double), data.size() * sizeof(double)));
           })
       .def_rw("cam_to_world_extrinsics_set", &dex::camera::CameraFrameBuffer::cam_to_world_extrinsics_set)
       .def_rw("depth_scale", &dex::camera::CameraFrameBuffer::depth_scale)
