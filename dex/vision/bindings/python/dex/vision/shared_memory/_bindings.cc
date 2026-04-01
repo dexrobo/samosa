@@ -111,7 +111,71 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<uint8_t, nb::c_contig>& data) {
             std::memcpy(buffer.color_stereo_right_image_bytes.data(), data.data(),
                         std::min(buffer.color_stereo_right_image_bytes.size(), data.size()));
-          });
+          })
+      // ===== Camera Calibration Fields =====
+      .def_prop_rw(
+          "color_intrinsics_k",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.color_intrinsics_k.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.color_intrinsics_k.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.color_intrinsics_k.data(), data.data(),
+                        std::min(buffer.color_intrinsics_k.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_prop_rw(
+          "color_intrinsics_d",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.color_intrinsics_d.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.color_intrinsics_d.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.color_intrinsics_d.data(), data.data(),
+                        std::min(buffer.color_intrinsics_d.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_prop_rw(
+          "depth_intrinsics_k",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.depth_intrinsics_k.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.depth_intrinsics_k.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.depth_intrinsics_k.data(), data.data(),
+                        std::min(buffer.depth_intrinsics_k.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_prop_rw(
+          "depth_intrinsics_d",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.depth_intrinsics_d.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.depth_intrinsics_d.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.depth_intrinsics_d.data(), data.data(),
+                        std::min(buffer.depth_intrinsics_d.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_prop_rw(
+          "cam_to_world_extrinsics",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.cam_to_world_extrinsics.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.cam_to_world_extrinsics.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.cam_to_world_extrinsics.data(), data.data(),
+                        std::min(buffer.cam_to_world_extrinsics.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_prop_rw(
+          "depth_to_rgb_extrinsics",
+          [](dex::camera::CameraFrameBuffer& buffer) {
+            std::array<size_t, 1> shape = {buffer.depth_to_rgb_extrinsics.size()};
+            return nb::ndarray<nb::numpy, double>(buffer.depth_to_rgb_extrinsics.data(), 1, shape.data());
+          },
+          [](dex::camera::CameraFrameBuffer& buffer, const nb::ndarray<double, nb::c_contig>& data) {
+            std::memcpy(buffer.depth_to_rgb_extrinsics.data(), data.data(),
+                        std::min(buffer.depth_to_rgb_extrinsics.size() * sizeof(double), data.size() * sizeof(double)));
+          })
+      .def_rw("cam_to_world_extrinsics_set", &dex::camera::CameraFrameBuffer::cam_to_world_extrinsics_set)
+      .def_rw("depth_scale", &dex::camera::CameraFrameBuffer::depth_scale)
+      .def_rw("stereo_baseline_meters", &dex::camera::CameraFrameBuffer::stereo_baseline_meters);
 
   using CameraBuffer = dex::camera::CameraFrameBuffer;
   using ShmBuffer = dex::shared_memory::SharedMemory<CameraBuffer, 2, dex::shared_memory::LockFreeSharedMemoryBuffer>;
