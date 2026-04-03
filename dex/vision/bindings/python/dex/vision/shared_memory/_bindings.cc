@@ -269,4 +269,3 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           nb::arg("timeout_sec") = kDefaultMonitorTimeoutSec,
           nb::arg("read_mode") = dex::shared_memory::MonitorReadMode::WaitForStableSnapshot);
 }
-

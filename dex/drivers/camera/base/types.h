@@ -96,4 +96,3 @@ struct CameraFrameBuffer {
 }  // namespace dex::camera
 
 #endif  // DEX_DRIVERS_CAMERA_BASE_TYPES_H
-
