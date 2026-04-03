@@ -24,6 +24,7 @@ struct SharedMemoryBuffer {
 
 using SharedArrayBuffer = dex::shared_memory::SharedMemory<ArrayBuffer, 2, SharedMemoryBuffer>;
 
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 // Store pointers to real system calls
 using ShmOpenFunc = int (*)(const char*, int, mode_t);
 using FtruncateFunc = int (*)(int, off_t);
@@ -85,6 +86,7 @@ class SystemCallControls {
 };
 
 inline const SystemCallControls& syscall_controls = SystemCallControls::Instance();
+#endif  // !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 
 class SharedMemoryTest : public testing::Test {
  protected:
@@ -98,6 +100,7 @@ class SharedMemoryTest : public testing::Test {
   std::string shared_memory_name_;
 };
 
+#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 class SystemCallFixture : public SharedMemoryTest {
  protected:
   void TearDown() override {
@@ -107,7 +110,6 @@ class SystemCallFixture : public SharedMemoryTest {
 };
 
 // System call overrides
-#if !defined(__SANITIZE_ADDRESS__) && !defined(__SANITIZE_THREAD__)
 extern "C" {
 int shm_open(const char* name, int oflag, mode_t mode) { return syscall_controls.ShmOpen(name, oflag, mode); }
 
@@ -242,4 +244,3 @@ TEST_F(SharedMemoryTest, SizeMismatch) {
 }
 
 }  // namespace
-

@@ -83,4 +83,3 @@ void StreamingControl::SignalHandler(int sig) {
 }
 
 }  // namespace dex::shared_memory
-

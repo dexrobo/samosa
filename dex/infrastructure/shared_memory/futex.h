@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_FUTEX_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_FUTEX_H
+#pragma once
 
 #include <atomic>
 #include <experimental/memory>
@@ -34,21 +33,21 @@ class Futex {
   Futex(Futex&&) = delete;
   Futex& operator=(Futex&&) = delete;
 
-  [[nodiscard]] virtual WaitResult Wait(const std::atomic<uint32_t>& futex, int expected,
+  [[nodiscard]] virtual WaitResult Wait(const std::atomic<uint32_t>& futex, const int expected,
                                         const timespec* timeout = nullptr) const = 0;
 
-  [[nodiscard]] virtual bool Wake(const std::atomic<uint32_t>& futex, int count) const = 0;
+  [[nodiscard]] virtual bool Wake(const std::atomic<uint32_t>& futex, const int count) const = 0;
 };
 
 // Default implementation using real futex operations
 class DefaultFutex : public Futex {
  public:
-  [[nodiscard]] WaitResult Wait(const std::atomic<uint32_t>& futex, int expected,
+  [[nodiscard]] WaitResult Wait(const std::atomic<uint32_t>& futex, const int expected,
                                 const timespec* timeout = nullptr) const override {
     return FutexWait(futex, expected, timeout);
   }
 
-  [[nodiscard]] bool Wake(const std::atomic<uint32_t>& futex, int count) const override {
+  [[nodiscard]] bool Wake(const std::atomic<uint32_t>& futex, const int count) const override {
     return FutexWake(futex, count);
   }
 };
@@ -109,5 +108,3 @@ class ScopedFutex {
 };
 
 }  // namespace dex::shared_memory::detail
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_FUTEX_H
-

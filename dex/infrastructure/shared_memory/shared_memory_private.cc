@@ -15,4 +15,3 @@ std::string FormatSystemError(std::string_view prefix, int error_code) {
 }
 
 }  // namespace dex::shared_memory::detail
-

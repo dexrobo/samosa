@@ -928,7 +928,7 @@ TEST_F(SharedMemStreamingTest, LargeBufferCommunication) {
         dex::shared_memory::Producer<LargeBuffer> producer{shared_memory_name};
         producer.Run([](LargeBuffer& buffer, uint /*counter*/, int /*buffer_id*/) {
           buffer.a = 0xDEADBEEF;
-          std::memset(buffer.data.data(), static_cast<int>(0xAA), buffer.data.size());
+          std::memset(buffer.data.data(), 0xAA, buffer.data.size());
         });
         CoverageSafeExit(0);
       },
@@ -950,4 +950,3 @@ TEST_F(SharedMemStreamingTest, LargeBufferCommunication) {
 }
 
 }  // namespace
-

@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
+#pragma once
 
 // System headers
 #include <atomic>
@@ -121,5 +120,3 @@ class StreamingControl {
 };
 
 }  // namespace dex::shared_memory
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_STREAMING_CONTROL_H
-

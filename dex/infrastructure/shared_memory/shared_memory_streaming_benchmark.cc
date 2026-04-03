@@ -223,8 +223,8 @@ void BenchmarkSharedMemoryLatency(benchmark::State& state) {
     const std::string metrics_shared_memory_name =
         "benchmark_metrics_shared_memory_" + std::to_string(id_distribution(random_engine));
 
-    const SharedMemoryNames shm_names{.data_shm_name = shared_memory_name,
-                                      .metrics_shm_name = metrics_shared_memory_name};
+    const SharedMemoryNames shm_names = {.data_shm_name = shared_memory_name,
+                                         .metrics_shm_name = metrics_shared_memory_name};
 
     // Create and initialize shared memory segments with the random names
     if (!CreateSharedMemory(shm_names)) {
@@ -363,4 +363,3 @@ int main(int argc, char** argv) {
 }
 
 // BENCHMARK_MAIN();
-

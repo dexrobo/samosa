@@ -57,4 +57,3 @@ bool FutexWake(const std::atomic<uint32_t>& futex, int count) {
 }
 
 }  // namespace dex::shared_memory::detail
-

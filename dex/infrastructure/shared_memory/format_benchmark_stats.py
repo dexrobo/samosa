@@ -10,14 +10,50 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import TypedDict
+
+
+class BenchmarkStats(TypedDict):
+    """Summary statistics for one measured metric."""
+
+    mean: float
+    stddev: float
+    cv: float
+    min: float
+    max: float
+    median: float
+    percentile_99: float
+
+
+class BenchmarkParameters(TypedDict):
+    """Benchmark configuration for one grouped run."""
+
+    frame_interval_us: int
+    num_frames_per_run: int
+    total_frames: int
+
+
+class FrameContinuity(TypedDict):
+    """Frame skip summary for one grouped run."""
+
+    non_skipped: int
+    skipped: int
+
+
+class BenchmarkGroupSummary(TypedDict):
+    """Serialized summary for one benchmark group."""
+
+    parameters: BenchmarkParameters
+    continuity: FrameContinuity
+    metrics: dict[str, BenchmarkStats]
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
-def calculate_stats(values: list[float]) -> dict[str, float] | None:
+def calculate_stats(values: list[float]) -> BenchmarkStats | None:
     """Calculate basic statistics for a list of values.
 
     Args:
@@ -45,7 +81,7 @@ def calculate_stats(values: list[float]) -> dict[str, float] | None:
         "min": sorted_values[0],
         "max": sorted_values[-1],
         "median": sorted_values[n // 2],
-        "99th": sorted_values[int(n * 0.99)],
+        "percentile_99": sorted_values[int(n * 0.99)],
     }
 
 
@@ -92,7 +128,7 @@ def group_benchmark_data(data: list[dict[str, float]]) -> dict[tuple[int, int], 
     return groups
 
 
-def process_group(frame_interval_us: int, num_frames: int, group_data: list[dict[str, float]]) -> dict[str, Any]:
+def process_group(frame_interval_us: int, num_frames: int, group_data: list[dict[str, float]]) -> BenchmarkGroupSummary:
     """Process a group of benchmark data and log statistics.
 
     Args:
@@ -131,7 +167,7 @@ def process_group(frame_interval_us: int, num_frames: int, group_data: list[dict
     )
     logger.info(fmt_str)
 
-    summary_item: dict[str, Any] = {
+    summary_item: BenchmarkGroupSummary = {
         "parameters": {
             "frame_interval_us": frame_interval_us,
             "num_frames_per_run": num_frames,
@@ -149,7 +185,7 @@ def process_group(frame_interval_us: int, num_frames: int, group_data: list[dict
         if stats:
             res_str = (
                 f"{metric:<25} {stats['mean']:>10.1f} {stats['stddev']:>10.1f} {stats['cv']:>10.1f} "
-                f"{stats['min']:>10.1f} {stats['max']:>10.1f} {stats['median']:>10.1f} {stats['99th']:>10.1f}"
+                f"{stats['min']:>10.1f} {stats['max']:>10.1f} {stats['median']:>10.1f} {stats['percentile_99']:>10.1f}"
             )
             logger.info(res_str)
             summary_item["metrics"][metric] = stats
@@ -158,7 +194,7 @@ def process_group(frame_interval_us: int, num_frames: int, group_data: list[dict
     return summary_item
 
 
-def save_summary(summaries: list[dict[str, Any]], output_json: str, workspace: str | None) -> None:
+def save_summary(summaries: list[BenchmarkGroupSummary], output_json: str, workspace: str | None) -> None:
     """Save benchmark summaries to a JSON file.
 
     Args:
