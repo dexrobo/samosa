@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
+#pragma once
 
 // System headers
 #include <csignal>  // for signal, SIGINT, SIGTERM
@@ -220,12 +219,12 @@ class Producer {
    * @param frame_count The index of the frame being produced.
    * @param produce The function used to produce the frame data.
    */
-  void ProduceFrame(uint frame_count, auto&& produce)
+  void ProduceFrame(const uint frame_count, auto&& produce)
     requires detail::ProducerFunction<std::remove_reference_t<decltype(produce)>, Buffer>;
 
   SharedMemoryBuffer shared_memory_buffer_;
   std::reference_wrapper<StreamingControl> streaming_control_;
-  uint current_frame_count_{0};
+  uint current_frame_count_ = 0;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -307,21 +306,18 @@ class Consumer {
    * @param timeout Optional timeout for the blocking operation.
    * @return RunResult indicating why the consumption stopped.
    */
-  [[nodiscard]] RunResult ConsumeFrame(uint frame_count, auto&& consume, const timespec* timeout = nullptr)
+  [[nodiscard]] RunResult ConsumeFrame(const uint frame_count, auto&& consume, const timespec* timeout = nullptr)
     requires detail::ConsumerFunction<std::remove_reference_t<decltype(consume)>, Buffer>;
 
   /// @return RunResult
-  [[nodiscard]] RunResult HandleWaitResult(detail::WaitResult wait_result);
+  [[nodiscard]] RunResult HandleWaitResult(const detail::WaitResult wait_result);
 
   SharedMemoryBuffer shared_memory_buffer_;
   // To get around: cppcoreguidelines-avoid-const-or-ref-data-members
   std::reference_wrapper<StreamingControl> streaming_control_;
-  uint current_frame_count_{0};
+  uint current_frame_count_ = 0;
 };
 
 }  // namespace dex::shared_memory
 
 #include "dex/infrastructure/shared_memory/shared_memory_streaming_impl.h"
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_H
-

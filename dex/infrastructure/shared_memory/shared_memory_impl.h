@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
+#pragma once
 
 // System headers
 #include <fcntl.h>     // for O_RDWR, O_CREAT
@@ -221,6 +220,3 @@ bool SharedMemory<Buffer, buffer_size, SharedMemoryBuffer>::ValidateBuffer(
 }
 
 }  // namespace dex::shared_memory
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_IMPL_H
-

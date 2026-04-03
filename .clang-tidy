@@ -11,6 +11,10 @@
 # -modernize-use-trailing-return-type: This is purely stylistic and controversial. Prefer to leave this up to the
 #    developer.
 # -performance-enum-size: Not a priority for our codebase.
+# -portability-avoid-pragma-once: #pragma once is universally supported by all target compilers (GCC, Clang) and
+#    avoids the maintenance burden and typo risk of manual include guards.
+# -readability-avoid-const-params-in-decls: Conflicts with bugprone-missing-argument-const, which requires const on
+#    value parameters. The bugprone check is more useful (prevents accidental mutation) so we defer to it.
 
 # Top-level config file.
 InheritParentConfig: False
@@ -33,9 +37,11 @@ Checks: >
   -misc-include-cleaner,
   -misc-header-include-cycle,
   -google-default-arguments,
+  -portability-avoid-pragma-once,
+  -readability-avoid-const-params-in-decls,
 
-# Only lint dex header files (not system or thirdparty).
-HeaderFilterRegex: '^\.\/dex\/'
+# Only lint dex and tools header files (not system or thirdparty).
+HeaderFilterRegex: '^\.\/(dex|tools)\/'
 
 # Use .clang-format file for formatting automated fixes.
 FormatStyle: 'file'

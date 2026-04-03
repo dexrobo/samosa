@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
+#pragma once
 
 #include <functional>
 #include <memory>
@@ -24,8 +23,9 @@ concept MonitorCallback = std::invocable<Fn, const Buffer&> || std::invocable<Fn
  * Defines how the Monitor should handle producer writing state.
  */
 enum class MonitorReadMode {
-  // Do not begin from an already-active producer write episode. If validation detects overlap while
-  // copying, the monitor discards or retries within the caller's timeout budget.
+  // Do not begin from an already-active producer write episode. Returns immediately if the producer
+  // is writing — does not wait or meaningfully exercise timeout_sec. If post-copy validation detects
+  // overlap, the snapshot is discarded.
   SkipIfBusy,
 
   // If the producer is already writing, wait for `sequence_and_writing` to change within the timeout
@@ -91,6 +91,10 @@ class Monitor {
    *
    * Prefer ReadInto() for repeated or concurrent reads. This convenience API returns a reference backed by
    * internal scratch storage rather than caller-owned memory.
+   *
+   * @note Not thread-safe for concurrent calls on the same Monitor instance. The returned reference
+   * aliases internal scratch storage (buffer_cache_), so concurrent callers would race on that buffer.
+   * Use ReadInto() with caller-owned storage for concurrent access.
    */
   std::optional<std::reference_wrapper<const Buffer>> GetLatestBuffer(
       double timeout_sec = detail::kDefaultMonitorTimeoutSec,
@@ -156,6 +160,3 @@ class Monitor {
 }  // namespace dex::shared_memory
 
 #include "dex/infrastructure/shared_memory/shared_memory_monitor_impl.h"
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_H
-

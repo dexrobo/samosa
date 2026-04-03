@@ -17,6 +17,50 @@ If you keep that mental model in mind, the monitor API becomes much easier to re
 
 The normal streaming path is between exactly one producer and one consumer.
 
+```mermaid
+graph LR
+    P[Producer] -- "writes into<br/>inactive slot" --> B["buffers[0], buffers[1]"]
+    B -- "write_index publishes<br/>active slot" --> C[Consumer]
+    C -- "read_index requests<br/>next slot" --> B
+    M[Monitor] -. "reads last_written_buffer +<br/>slot data (no index writes)" .-> B
+```
+
+The two `buffers[]` slots are the shared memory. `write_index` and `read_index` are
+atomic indices that the producer and consumer use to coordinate which slot is active.
+`Monitor` reads `last_written_buffer` and the slot data directly — it never touches
+`read_index` or `write_index`.
+
+Example timing (steady-state, double-buffered):
+
+```mermaid
+sequenceDiagram
+    participant P as Producer
+    participant S as buffers[0..1]
+    participant C as Consumer
+    participant M as Monitor
+
+    Note over C,S: Consumer is reading buffers[0] (BufferA)
+
+    P->>S: set writing flag on slot 1
+    P->>S: write into buffers[1]
+    P->>S: clear writing flag on slot 1
+    P->>S: last_written_buffer ← BufferB
+
+    Note over M: Monitor sees new data before consumer finishes
+
+    par Monitor samples slot 1
+        M-->>S: read last_written_buffer → BufferB
+        M-->>S: copy buffers[1], validate
+    and Consumer finishes slot 0
+        C->>S: read_index ← BufferB (ready for next)
+    end
+
+    Note over P: read_index == BufferB, publish
+    P->>S: write_index ← BufferB
+    P-->>C: futex wake (consumer)
+    C->>S: read buffers[1]
+```
+
 * The producer writes POD snapshots into one of two shared-memory slots.
 * The consumer uses `read_index` and `write_index` as the ownership and publication handshake.
 * Only the producer and consumer participate in that handshake.

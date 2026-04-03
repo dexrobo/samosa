@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
+#pragma once
 
 #include <array>
 
@@ -14,7 +13,7 @@ namespace dex::shared_memory::test {
 constexpr size_t kFrameSize = 64;
 using ArrayBuffer = std::array<char, kFrameSize>;
 
-constexpr size_t kLargeFrameSize = 16 * 1024 * 1024;
+constexpr size_t kLargeFrameSize = static_cast<size_t>(16) * 1024 * 1024;
 
 struct LargeStruct {
   uint32_t a;
@@ -213,12 +212,11 @@ class SharedMemStreamingTest : public testing::Test {
   }
 
   void TearDown() override {
-    (void)SharedMemory<ArrayBuffer, 2, shared_memory::LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
+    [[maybe_unused]] const bool destroyed =
+        SharedMemory<ArrayBuffer, 2, shared_memory::LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
   }
 
   std::string shared_memory_name_;
 };
 
 }  // namespace dex::shared_memory::test
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_TEST_PRIVATE_H
-

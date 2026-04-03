@@ -32,7 +32,8 @@ void SetPublishedSnapshot(SharedMemoryType& shared_memory, const detail::BufferS
   const auto slot_index = detail::ToBufferIndex(slot);
   auto& buffer = shared_memory.Get()->buffers[slot_index];
   std::memset(buffer.data(), 0, buffer.size());
-  std::memcpy(buffer.data(), payload.data(), std::min(payload.size(), buffer.size() - 1));
+  const auto copy_size = std::min(payload.size(), buffer.size() - 1);
+  std::copy_n(payload.begin(), copy_size, buffer.begin());
 
   shared_memory.Get()->slot_sequence_and_writing[slot_index].store(detail::PackSequenceAndWriting(sequence, false),
                                                                    std::memory_order_release);
@@ -66,7 +67,8 @@ class SharedMemoryMonitorTest : public testing::Test {
 
   void TearDown() override {
     // Clean up shared memory
-    (void)SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
+    [[maybe_unused]] const auto destroyed =
+        SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(shared_memory_name_);
   }
 
   std::string shared_memory_name_;
@@ -159,10 +161,10 @@ TEST_F(SharedMemoryMonitorTest, ReadIntoCopiesValidatedSnapshotAndReportsSequenc
 
   SetPublishedSnapshot(shared_memory, detail::BufferState::BufferB, 7, "copied payload");
 
-  Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
+  const Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
   ASSERT_TRUE(monitor.IsValid());
 
-  test::ArrayBuffer destination{};
+  test::ArrayBuffer destination = {};
   detail::SequenceNumber sequence = 0;
   EXPECT_TRUE(monitor.ReadInto(destination, 0.1, MonitorReadMode::WaitForStableSnapshot, &sequence));
   EXPECT_EQ(std::string(destination.data()), "copied payload");
@@ -196,7 +198,8 @@ TEST_F(SharedMemoryMonitorTest, GetLatestBufferKeepsScratchStoragePerMonitorInst
 
   EXPECT_EQ(std::string(buffer_a->get().data()), "monitor-a");
 
-  (void)SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(other_shared_memory_name);
+  [[maybe_unused]] const auto destroyed =
+      SharedMemory<test::ArrayBuffer, 2, LockFreeSharedMemoryBuffer>::Destroy(other_shared_memory_name);
 }
 
 TEST_F(SharedMemoryMonitorTest, SkipDuringWrite) {
@@ -592,7 +595,7 @@ TEST_F(SharedMemoryMonitorTest, RunContinuesAcrossWrappedMonitorSequences) {
   ASSERT_TRUE(monitor.IsValid());
 
   std::atomic<uint32_t> callback_count{0};
-  std::array<uint64_t, 3> observed_sequences{};
+  std::array<uint64_t, 3> observed_sequences = {};
 
   std::thread producer_thread([&]() {
     while (callback_count.load(std::memory_order_acquire) < 1) {
@@ -699,9 +702,8 @@ TEST_F(SharedMemoryMonitorTest, MonitorRejectsOldSharedMemoryVersion) {
   ASSERT_TRUE(shared_memory.IsValid());
   shared_memory.Get()->version = detail::kSharedMemVersion - 1;
 
-  Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
+  const Monitor<test::ArrayBuffer> monitor{shared_memory_name_};
   EXPECT_FALSE(monitor.IsValid());
 }
 
 }  // namespace dex::shared_memory
-

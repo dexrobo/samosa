@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
+#pragma once
 
 #include "spdlog/spdlog.h"
 
@@ -284,6 +283,3 @@ RunResult Consumer<Buffer, buffer_size, StreamingSharedMemoryBuffer>::ConsumeFra
 #endif
 
 }  // namespace dex::shared_memory
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_STREAMING_IMPL_H
-

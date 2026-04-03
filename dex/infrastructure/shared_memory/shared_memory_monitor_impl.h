@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
+#pragma once
 
 #include <chrono>
 #include <cmath>  // For std::modf
@@ -292,6 +291,3 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
 }
 
 }  // namespace dex::shared_memory
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_MONITOR_IMPL_H
-

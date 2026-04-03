@@ -1,5 +1,4 @@
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_PRIVATE_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_PRIVATE_H
+#pragma once
 
 #include <string>
 
@@ -14,5 +13,3 @@ namespace dex::shared_memory::detail {
 [[nodiscard]] std::string FormatSystemError(std::string_view prefix, int err);
 
 }  // namespace dex::shared_memory::detail
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_PRIVATE_H
-

@@ -77,12 +77,10 @@ cc_test(
     name = "shared_memory_test",
     size = "small",
     srcs = ["shared_memory_test.cc"],
-    # This test intercepts system calls using dlsym(RTLD_NEXT, ...), which doesn't work with
-    # static sanitizers. Use --config=asan_dynamic or --config=tsan_dynamic instead of
-    # --config=asan or --config=tsan to test with sanitizers.
+    # Static ASAN links the runtime but doesn't compile with -fsanitize=address,
+    # so __SANITIZE_ADDRESS__ is not defined and the dlsym code compiles in, causing SEGV.
     target_compatible_with = select({
         "//:asan_config": ["@platforms//:incompatible"],
-        "//:tsan_config": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
     deps = [
@@ -118,6 +116,8 @@ cc_test(
     srcs = ["shared_memory_streaming_test.cc"],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
+    # Fork-based IPC tests deadlock under all sanitizer modes (bare fork
+    # without exec corrupts the sanitizer runtime in the child process).
     target_compatible_with = select({
         "//:asan_config": ["@platforms//:incompatible"],
         "//:asan_dynamic_config": ["@platforms//:incompatible"],
@@ -135,29 +135,26 @@ cc_test(
 )
 
 # This test runs a suite of tests with variable delays.
-# This could take a long time to run with sanitizers.
 cc_test(
     name = "shared_memory_streaming_delay_test",
     size = "small",
     srcs = ["shared_memory_streaming_delay_test.cc"],
     env = select({
         "//:ci_config": {
-            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+            "GCOV_CHILD_FORK": "1",
             "REDUCED_TEST_SET": "1",
         },
         "//conditions:default": {
-            "GCOV_CHILD_FORK": "1",  # Preserve existing env var
+            "GCOV_CHILD_FORK": "1",
         },
     }),
     flaky = True,
+    # Fork-based IPC tests deadlock under static sanitizer modes.
+    # Dynamic configs pass. Coverage job also excluded due to flakiness.
     target_compatible_with = select({
         "//:asan_config": ["@platforms//:incompatible"],
-        "//:asan_dynamic_config": ["@platforms//:incompatible"],
-        # TODO: Frequently fails in coverage job even though it is marked flaky
         "//:gcov_config": ["@platforms//:incompatible"],
         "//:tsan_config": ["@platforms//:incompatible"],
-        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
-        "//:ubsan_config": ["@platforms//:incompatible"],
         "//conditions:default": [],
     }),
     deps = [
@@ -217,6 +214,12 @@ cc_test(
     srcs = ["shared_memory_monitor_test.cc"],
     env = {"GCOV_CHILD_FORK": "1"},
     flaky = True,
+    # Futex wake/scheduling issues cause timeouts under both TSAN modes.
+    target_compatible_with = select({
+        "//:tsan_config": ["@platforms//:incompatible"],
+        "//:tsan_dynamic_config": ["@platforms//:incompatible"],
+        "//conditions:default": [],
+    }),
     deps = [
         ":shared_memory_monitor",
         ":shared_memory_streaming",

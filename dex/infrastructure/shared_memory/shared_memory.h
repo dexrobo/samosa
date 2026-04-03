@@ -1,3 +1,5 @@
+#pragma once
+
 /**
  * @file shared_memory.h
  * @brief Core primitives for lock-free snapshot streaming via shared memory.
@@ -5,9 +7,6 @@
  * This library is optimized for streaming snapshots of POD types between processes.
  * It is not a general-purpose IPC queue; consumers always jump to the latest state.
  */
-
-#ifndef DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
-#define DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
 
 #include <unistd.h>  // for close
 
@@ -98,7 +97,7 @@ class SharedMemory {
    * @param name Name of the shared memory segment to destroy.
    * @return true if the shared memory was successfully unlinked, false otherwise.
    */
-  [[nodiscard]] static bool Destroy(std::string_view name);
+  [[nodiscard]] static bool Destroy(const std::string_view name);
 
   /**
    * @brief Retrieves a pointer to the mapped lock-free shared memory buffer.
@@ -144,7 +143,7 @@ class SharedMemory {
   } state_;
 
   // State transition methods
-  [[nodiscard]] bool OpenFile(bool create);
+  [[nodiscard]] bool OpenFile(const bool create);
   [[nodiscard]] bool InitializeSize();
   [[nodiscard]] bool MapMemory();
   [[nodiscard]] bool InitializeBuffer(detail::BufferCallback<BufferType> callback);
@@ -155,6 +154,3 @@ class SharedMemory {
 }  // namespace dex::shared_memory
 
 #include "dex/infrastructure/shared_memory/shared_memory_impl.h"
-
-#endif  // DEX_INFRASTRUCTURE_SHARED_MEMORY_SHARED_MEMORY_H
-

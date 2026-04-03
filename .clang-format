@@ -1,8 +1,6 @@
 BasedOnStyle: Google
 ColumnLimit: 120
 InsertNewlineAtEOF: true
-KeepEmptyLinesAtEOF: true
-MaxEmptyLinesToKeep: 1
 
 # The Google Style Guide only asks for consistency w.r.t. "const west" vs. "east const" alignment of cv-qualifiers.
 # In this repository we use "const west".
