@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <unordered_set>
 #include <vector>
 
 #include "fmt/core.h"
@@ -39,7 +40,14 @@ int main(int argc, char** argv) {
   std::vector<std::unique_ptr<dex::video_monitor::TopicPipeline>> pipelines;
   std::vector<dex::video_monitor::HttpServer::TopicEndpoint> endpoints;
 
+  std::unordered_set<std::string> seen_shm_names;
+
   for (const auto& topic : config.topics) {
+    if (!seen_shm_names.insert(topic.shm_name).second) {
+      SPDLOG_WARN("Skipping duplicate topic '{}'", topic.shm_name);
+      continue;
+    }
+
     auto ring = std::make_unique<dex::video_monitor::FragmentRing>(config.server.fragment_ring_size);
     auto pipeline = std::make_unique<dex::video_monitor::TopicPipeline>(topic, *ring);
     std::string path = "/stream/" + topic.endpoint;

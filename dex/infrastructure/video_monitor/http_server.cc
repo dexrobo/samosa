@@ -31,20 +31,20 @@ const hud = document.getElementById('hud');
 if (!('MediaSource' in window)) {
   document.body.innerHTML = '<div class="error">MediaSource API not supported in this browser.</div>';
 } else {
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) location.reload();
+  });
+
   const ms = new MediaSource();
   video.src = URL.createObjectURL(ms);
 
   ms.addEventListener('sourceopen', async () => {
     const sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42c028"');
-    // sequence mode: browser auto-generates timestamps starting from 0 for each
-    // new connection, ignoring tfdt. This ensures late joiners and page refreshes
-    // always start cleanly at t=0.
     sb.mode = 'sequence';
 
     const response = await fetch(streamUrl);
     const reader = response.body.getReader();
 
-    // Append queue — serializes appendBuffer calls to avoid InvalidStateError.
     const queue = [];
     let appending = false;
 
@@ -64,30 +64,22 @@ if (!('MediaSource' in window)) {
       processQueue();
     });
 
-    // Live edge tracker — keeps playback pinned to the latest data.
     setInterval(() => {
       if (sb.buffered.length === 0) return;
       const start = sb.buffered.start(0);
       const end = sb.buffered.end(0);
       const behind = end - video.currentTime;
-
-      // Evict old data to cap memory (~6s retained).
       if (end - start > 8 && !sb.updating) {
         try { sb.remove(0, end - 6); } catch(e) {}
       }
-
-      // Jump to live edge if fallen behind.
       if (behind > 1.5 || video.currentTime < start) {
         video.currentTime = end - 0.1;
       }
-
-      // Auto-resume if paused from buffer underrun.
       if (video.paused) video.play().catch(() => {});
-
-      hud.textContent = 'buf: ' + (end - start).toFixed(1) + 's | behind: ' + behind.toFixed(1) + 's';
+      const lag = Math.max(0, behind);
+      hud.textContent = 'buffered ' + (end - start).toFixed(1) + 's | lag -' + lag.toFixed(1) + 's';
     }, 300);
 
-    // Read stream chunks and enqueue for append.
     async function pump() {
       while (true) {
         const { done, value } = await reader.read();
@@ -99,6 +91,143 @@ if (!('MediaSource' in window)) {
     pump().catch(e => console.error('Stream error:', e));
   });
 }
+</script></body></html>)html";
+
+// Dashboard page: tiled grid of all topics with click-to-maximize.
+// %TOPICS_JSON% is replaced with a JSON array of {name, stream} objects.
+constexpr const char* kDashboardPageTemplate = R"html(<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Video Monitor — Dashboard</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #111; font-family: sans-serif; color: #eee; overflow: hidden; height: 100vh; }
+  #header { display: flex; align-items: center; padding: 6px 16px; background: #1a1a1a;
+            border-bottom: 1px solid #333; gap: 16px; }
+  #header h1 { font-size: 14px; font-weight: 500; opacity: 0.7; }
+  #header a { color: #6af; font-size: 12px; text-decoration: none; }
+  #grid { display: grid; gap: 2px; padding: 2px; height: calc(100vh - 36px); }
+  .tile { position: relative; background: #000; overflow: hidden; cursor: pointer;
+          display: flex; align-items: center; justify-content: center; }
+  .tile video { width: 100%; height: 100%; object-fit: contain; }
+  .tile .label { position: absolute; top: 6px; left: 8px; font-size: 11px; color: #fff;
+                 background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 3px;
+                 pointer-events: none; z-index: 2; }
+  .tile .hud { position: absolute; bottom: 4px; right: 8px; font-size: 10px; color: #888;
+               font-family: monospace; pointer-events: none; z-index: 2; }
+  .tile.maximized { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
+  .tile.maximized .label { font-size: 13px; top: 10px; left: 12px; }
+</style></head><body>
+<div id="header">
+  <h1>Video Monitor</h1>
+  <a href="/status">status</a>
+</div>
+<div id="grid"></div>
+<script>
+const topics = %TOPICS_JSON%;
+const grid = document.getElementById('grid');
+
+// Reload on tab refocus — the fetch stream buffers data while backgrounded
+// and draining the backlog takes too long. A reload reconnects fresh from
+// the latest IDR.
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) location.reload();
+});
+
+// Compute grid layout based on topic count.
+const n = topics.length;
+const cols = n <= 1 ? 1 : n <= 2 ? 2 : n <= 4 ? 2 : n <= 6 ? 3 : n <= 9 ? 3 : 4;
+grid.style.gridTemplateColumns = 'repeat(' + cols + ', 1fr)';
+
+function createPlayer(topic) {
+  const tile = document.createElement('div');
+  tile.className = 'tile';
+
+  const label = document.createElement('div');
+  label.className = 'label';
+  label.textContent = topic.name;
+  tile.appendChild(label);
+
+  const video = document.createElement('video');
+  video.autoplay = true; video.muted = true; video.playsInline = true;
+  tile.appendChild(video);
+
+  const hud = document.createElement('div');
+  hud.className = 'hud';
+  tile.appendChild(hud);
+
+  // Click to maximize/restore.
+  tile.addEventListener('click', () => {
+    if (tile.classList.contains('maximized')) {
+      tile.classList.remove('maximized');
+    } else {
+      document.querySelectorAll('.tile.maximized').forEach(t => t.classList.remove('maximized'));
+      tile.classList.add('maximized');
+    }
+  });
+
+  if (!('MediaSource' in window)) {
+    hud.textContent = 'MSE not supported';
+    grid.appendChild(tile);
+    return;
+  }
+
+  const ms = new MediaSource();
+  video.src = URL.createObjectURL(ms);
+
+  ms.addEventListener('sourceopen', async () => {
+    const sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42c028"');
+    sb.mode = 'sequence';
+
+    const response = await fetch(topic.stream);
+    const reader = response.body.getReader();
+
+    const queue = [];
+    let appending = false;
+
+    function processQueue() {
+      if (appending || queue.length === 0 || ms.readyState !== 'open') return;
+      appending = true;
+      try { sb.appendBuffer(queue.shift()); }
+      catch (e) { console.error(topic.name, 'append error:', e); appending = false; }
+    }
+
+    sb.addEventListener('updateend', () => {
+      appending = false;
+      processQueue();
+    });
+
+    function seekToLive() {
+      if (sb.buffered.length === 0) return;
+      const start = sb.buffered.start(0);
+      const end = sb.buffered.end(0);
+      const behind = end - video.currentTime;
+      if (end - start > 8 && !sb.updating) {
+        try { sb.remove(0, end - 6); } catch(e) {}
+      }
+      if (behind > 1.5 || video.currentTime < start) {
+        video.currentTime = end - 0.1;
+      }
+      if (video.paused) video.play().catch(() => {});
+      const lag = Math.max(0, behind);
+      hud.textContent = 'buffered ' + (end - start).toFixed(1) + 's | lag -' + lag.toFixed(1) + 's';
+    }
+
+    setInterval(seekToLive, 300);
+
+    async function pump() {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        queue.push(value);
+        processQueue();
+      }
+    }
+    pump().catch(e => console.error(topic.name, 'stream error:', e));
+  });
+
+  grid.appendChild(tile);
+}
+
+topics.forEach(createPlayer);
 </script></body></html>)html";
 
 // NOLINTEND
@@ -124,19 +253,23 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
     });
   }
 
-  // GET / — index page listing all viewer links.
+  // GET / — tiled dashboard showing all topics.
   impl_->server.Get("/", [this](const httplib::Request& /*req*/, httplib::Response& res) {
-    std::ostringstream html;
-    html << "<!DOCTYPE html><html><head><title>Video Monitor</title>"
-         << "<style>body{font-family:sans-serif;margin:2em;background:#1a1a1a;color:#eee;}"
-         << "a{color:#6af;font-size:1.2em;}</style></head><body>"
-         << "<h1>Video Monitor</h1><ul>";
-    for (const auto& ep : endpoints_) {
-      html << "<li><a href=\"/view/" << ep.name << "\">" << ep.name << "</a>"
-           << " (<a href=\"" << ep.path << "\">raw stream</a>)</li>";
+    // Build JSON array of topics for the dashboard template.
+    std::ostringstream topics_json;
+    topics_json << "[";
+    for (size_t i = 0; i < endpoints_.size(); ++i) {
+      if (i > 0) topics_json << ",";
+      topics_json << R"({"name":")" << endpoints_[i].name << R"(","stream":")" << endpoints_[i].path << R"("})";
     }
-    html << "</ul><p><a href=\"/status\">Pipeline Status</a></p></body></html>";
-    res.set_content(html.str(), "text/html");
+    topics_json << "]";
+
+    std::string page = kDashboardPageTemplate;
+    size_t pos = page.find("%TOPICS_JSON%");
+    if (pos != std::string::npos) {
+      page.replace(pos, 13, topics_json.str());
+    }
+    res.set_content(page, "text/html");
   });
 
   // GET /topics — list available streams.
