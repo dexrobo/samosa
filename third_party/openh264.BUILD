@@ -2,33 +2,55 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:public"])
 
-# OpenH264 v2.6.0 — Encoder-only, pure C++ (no assembly).
-# Assembly (NASM for x86, NEON for ARM) can be added later for performance.
+# OpenH264 v2.6.0 — Encoder-only.
+# ARM64 NEON assembly enabled on aarch64 for performance.
+# x86 assembly requires NASM and is not enabled.
 #
 # License: BSD-2-Clause
 # https://github.com/cisco/openh264
+
+OPENH264_COPTS = [
+    "-Wno-unused-parameter",
+    "-Wno-sign-compare",
+    "-Wno-missing-field-initializers",
+    "-Wno-unknown-warning-option",
+]
+
+# Platform-specific NEON sources and defines for aarch64.
+NEON_COPTS = select({
+    "@platforms//cpu:aarch64": ["-DHAVE_NEON_AARCH64"],
+    "//conditions:default": [],
+})
 
 cc_library(
     name = "common",
     srcs = glob(
         ["codec/common/src/*.cpp"],
         exclude = ["codec/common/src/*_test.cpp"],
-    ),
+    ) + select({
+        "@platforms//cpu:aarch64": glob(
+            ["codec/common/arm64/*.S"],
+            exclude = ["codec/common/arm64/arm_arch64_common_macro.S"],
+        ),
+        "//conditions:default": [],
+    }),
     hdrs = glob([
         "codec/common/inc/*.h",
         "codec/api/wels/*.h",
     ]),
+    # ARM64 assembly files #include macro files and headers from this directory.
+    textual_hdrs = select({
+        "@platforms//cpu:aarch64": ["codec/common/arm64/arm_arch64_common_macro.S"],
+        "//conditions:default": [],
+    }) + select({
+        "@platforms//cpu:aarch64": glob(["codec/common/arm64/*.h"]),
+        "//conditions:default": [],
+    }),
+    copts = OPENH264_COPTS + NEON_COPTS,
     includes = [
         "codec/api/wels",
         "codec/common/inc",
-    ],
-    # No assembly defines — pure C++ fallback paths.
-    # Do NOT define X86_ASM, HAVE_NEON, HAVE_NEON_AARCH64, etc.
-    copts = [
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-        "-Wno-missing-field-initializers",
-        "-Wno-unknown-warning-option",
+        "codec/common/arm64",
     ],
     linkopts = ["-lpthread"],
 )
@@ -40,15 +62,18 @@ cc_library(
         exclude = [
             "codec/processing/src/x86/**",
             "codec/processing/src/arm/**",
-            "codec/processing/src/arm64/**",
             "codec/processing/src/mips/**",
             "codec/processing/src/loongarch/**",
         ],
-    ),
+    ) + select({
+        "@platforms//cpu:aarch64": glob(["codec/processing/src/arm64/*.S"]),
+        "//conditions:default": [],
+    }),
     hdrs = glob([
         "codec/processing/interface/*.h",
         "codec/processing/src/**/*.h",
     ]),
+    copts = OPENH264_COPTS + NEON_COPTS,
     includes = [
         "codec/processing/interface",
         "codec/processing/src/common",
@@ -61,12 +86,6 @@ cc_library(
         "codec/processing/src/scenechangedetection",
         "codec/processing/src/scrolldetection",
         "codec/processing/src/vaacalc",
-    ],
-    copts = [
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-        "-Wno-missing-field-initializers",
-        "-Wno-unknown-warning-option",
     ],
     deps = [":common"],
 )
@@ -83,20 +102,18 @@ cc_library(
         exclude = [
             "codec/encoder/plus/src/DllEntry.cpp",
         ],
-    ),
+    ) + select({
+        "@platforms//cpu:aarch64": glob(["codec/encoder/core/arm64/*.S"]),
+        "//conditions:default": [],
+    }),
     hdrs = glob([
         "codec/encoder/core/inc/*.h",
         "codec/encoder/plus/inc/*.h",
     ]),
+    copts = OPENH264_COPTS + NEON_COPTS,
     includes = [
         "codec/encoder/core/inc",
         "codec/encoder/plus/inc",
-    ],
-    copts = [
-        "-Wno-unused-parameter",
-        "-Wno-sign-compare",
-        "-Wno-missing-field-initializers",
-        "-Wno-unknown-warning-option",
     ],
     deps = [
         ":common",
