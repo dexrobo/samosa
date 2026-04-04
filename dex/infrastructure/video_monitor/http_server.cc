@@ -110,9 +110,15 @@ constexpr const char* kDashboardPageTemplate = R"html(<!DOCTYPE html>
   .tile video { width: 100%; height: 100%; object-fit: contain; }
   .tile .label { position: absolute; top: 6px; left: 8px; font-size: 11px; color: #fff;
                  background: rgba(0,0,0,0.6); padding: 2px 8px; border-radius: 3px;
-                 pointer-events: none; z-index: 2; }
-  .tile .hud { position: absolute; bottom: 4px; right: 8px; font-size: 10px; color: #888;
-               font-family: monospace; pointer-events: none; z-index: 2; }
+                 pointer-events: none; z-index: 2; display: flex; align-items: center; gap: 6px; }
+  .tile .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+  .dot.live { background: #4f4; animation: pulse 1s infinite; }
+  .dot.stale { background: #fa0; }
+  .dot.offline { background: #f44; }
+  @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+  .tile .hud { position: absolute; bottom: 4px; left: 8px; right: 8px; font-size: 10px; color: #888;
+               font-family: monospace; pointer-events: none; z-index: 2;
+               display: flex; justify-content: space-between; }
   .tile.maximized { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; z-index: 10; }
   .tile.maximized .label { font-size: 13px; top: 10px; left: 12px; }
 </style></head><body>
@@ -143,7 +149,12 @@ function createPlayer(topic) {
 
   const label = document.createElement('div');
   label.className = 'label';
-  label.textContent = topic.name;
+  const dot = document.createElement('span');
+  dot.className = 'dot offline';
+  label.appendChild(dot);
+  const nameSpan = document.createElement('span');
+  nameSpan.textContent = topic.name;
+  label.appendChild(nameSpan);
   tile.appendChild(label);
 
   const video = document.createElement('video');
@@ -152,6 +163,10 @@ function createPlayer(topic) {
 
   const hud = document.createElement('div');
   hud.className = 'hud';
+  const hudLeft = document.createElement('span');
+  const hudRight = document.createElement('span');
+  hud.appendChild(hudLeft);
+  hud.appendChild(hudRight);
   tile.appendChild(hud);
 
   // Click to maximize/restore.
@@ -208,7 +223,7 @@ function createPlayer(topic) {
       }
       if (video.paused) video.play().catch(() => {});
       const lag = Math.max(0, behind);
-      hud.textContent = 'buffered ' + (end - start).toFixed(1) + 's | lag -' + lag.toFixed(1) + 's';
+      hudLeft.textContent = 'buffered ' + (end - start).toFixed(1) + 's | lag -' + lag.toFixed(1) + 's';
     }
 
     setInterval(seekToLive, 300);
@@ -225,9 +240,32 @@ function createPlayer(topic) {
   });
 
   grid.appendChild(tile);
+  return { name: topic.name, dot: dot, hudRight: hudRight };
 }
 
-topics.forEach(createPlayer);
+const players = topics.map(createPlayer);
+
+// Poll /status to update dots, FPS, clients, drops.
+setInterval(async () => {
+  try {
+    const res = await fetch('/status');
+    const data = await res.json();
+    for (const p of players) {
+      const t = data.topics[p.name];
+      if (!t) continue;
+      // Status dot.
+      p.dot.className = 'dot ' + (
+        t.state === 'streaming' && t.last_frame_ago_ms < 2000 ? 'live' :
+        t.state === 'streaming' || t.state === 'waiting_for_frames' ? 'stale' : 'offline');
+      // Right HUD: fps, clients, drops.
+      const parts = [];
+      parts.push(t.measured_fps.toFixed(1) + ' fps');
+      parts.push(t.clients_connected + (t.clients_connected === 1 ? ' client' : ' clients'));
+      if (t.frames_dropped > 0) parts.push(t.frames_dropped + ' dropped');
+      p.hudRight.textContent = parts.join(' | ');
+    }
+  } catch(e) {}
+}, 1000);
 </script></body></html>)html";
 
 // NOLINTEND
@@ -308,6 +346,11 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
           last_frame_ago_ms = (now_ns - last_ts) / 1000000;
         }
 
+        // Override state to stale if streaming but no frame for >2s.
+        if (state == PipelineState::kStreaming && last_frame_ago_ms > 2000) {
+          state = PipelineState::kStale;
+        }
+
         json << R"("state":")" << PipelineStateToString(state) << R"(",)";
         json << R"("resolution":")" << ep.stats->width.load(std::memory_order_relaxed) << "x"
              << ep.stats->height.load(std::memory_order_relaxed) << R"(",)";
@@ -316,7 +359,7 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
         json << R"("bitrate_kbps":)" << ep.topic_config.bitrate_kbps << ",";
         json << R"("frames_encoded":)" << ep.stats->frames_encoded.load(std::memory_order_relaxed) << ",";
         json << R"("frames_dropped":)" << ep.stats->frames_dropped.load(std::memory_order_relaxed) << ",";
-        json << R"("clients_connected":)" << ep.stats->clients_connected.load(std::memory_order_relaxed) << ",";
+        json << R"("clients_connected":)" << ep.ring->ClientCount() << ",";
         json << R"("last_frame_ago_ms":)" << last_frame_ago_ms << ",";
         json << R"("encoder_reinits":)" << ep.stats->encoder_reinits.load(std::memory_order_relaxed);
       } else {
@@ -336,6 +379,8 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
       res.set_header("Access-Control-Allow-Origin", "*");
       res.set_header("Cache-Control", "no-cache, no-store");
       res.set_header("Connection", "keep-alive");
+
+      ring->AddClient();
 
       res.set_chunked_content_provider(
           "video/mp4",
@@ -360,11 +405,8 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
             // Streaming loop: wait for new fragments and send them.
             while (true) {
               if (!ring->WaitForNew(last_seq, std::chrono::milliseconds(1000))) {
-                // Timeout — send empty to keep connection alive, or check for shutdown.
-                // The ring's WaitForNew returns false on shutdown (NotifyAll).
-                // We can check by seeing if the head hasn't moved.
                 if (ring->HeadSequence() == last_seq) {
-                  continue;  // No new data, just a timeout. Keep waiting.
+                  continue;
                 }
               }
 
@@ -377,9 +419,7 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
               last_seq = new_result.last_sequence;
             }
           },
-          [](bool /*success*/) {
-            // Connection closed callback — nothing to clean up.
-          });
+          [ring](bool /*success*/) { ring->RemoveClient(); });
     });
   }
 }

@@ -1,6 +1,7 @@
 #ifndef DEX_INFRASTRUCTURE_VIDEO_MONITOR_FRAGMENT_RING_H
 #define DEX_INFRASTRUCTURE_VIDEO_MONITOR_FRAGMENT_RING_H
 
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
 #include <cstdint>
@@ -61,6 +62,13 @@ class FragmentRing {
   /// Current head sequence number.
   [[nodiscard]] uint64_t HeadSequence() const;
 
+  /// Client tracking — called by HTTP handlers on connect/disconnect.
+  void AddClient() { clients_.fetch_add(1, std::memory_order_relaxed); }
+
+  void RemoveClient() { clients_.fetch_sub(1, std::memory_order_relaxed); }
+
+  [[nodiscard]] uint32_t ClientCount() const { return clients_.load(std::memory_order_relaxed); }
+
  private:
   mutable std::mutex mutex_;
   mutable std::condition_variable cv_;
@@ -71,6 +79,7 @@ class FragmentRing {
   uint64_t latest_idr_sequence_{0};
   std::vector<uint8_t> init_segment_;
   bool shutdown_{false};
+  std::atomic<uint32_t> clients_{0};
 };
 
 }  // namespace dex::video_monitor

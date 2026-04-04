@@ -140,6 +140,12 @@ void TopicPipeline::Run() {
           if (now - last_encode_time < min_frame_interval) {
             return;
           }
+
+          // Lazy encoding: skip if no clients are connected.
+          if (ring_.ClientCount() == 0) {
+            return;
+          }
+
           last_encode_time = now;
 
           uint32_t src_width = frame.color_width;
@@ -253,7 +259,11 @@ void TopicPipeline::Run() {
           });
 
           stats_.frames_encoded.fetch_add(1, std::memory_order_relaxed);
-          stats_.last_frame_timestamp_ns.store(frame_timestamp_nanos, std::memory_order_relaxed);
+          stats_.last_frame_timestamp_ns.store(
+              static_cast<uint64_t>(std::chrono::duration_cast<std::chrono::nanoseconds>(
+                                        std::chrono::steady_clock::now().time_since_epoch())
+                                        .count()),
+              std::memory_order_relaxed);
           ++frame_count;
         },
         0.1,                                                  // timeout_sec
