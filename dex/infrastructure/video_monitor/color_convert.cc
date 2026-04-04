@@ -56,4 +56,70 @@ void ConvertToI420(const uint8_t* src, size_t src_stride, uint8_t* dst_y, uint8_
   }
 }
 
+void ComputeScaledDimensions(uint32_t src_width, uint32_t src_height, uint32_t max_width, uint32_t max_height,
+                             uint32_t& out_width, uint32_t& out_height) {
+  // No limit or already fits.
+  if ((max_width == 0 && max_height == 0) || (src_width <= max_width && src_height <= max_height)) {
+    out_width = src_width;
+    out_height = src_height;
+    return;
+  }
+
+  // Scale to fit within bounds while preserving aspect ratio.
+  double scale_w = (max_width > 0) ? static_cast<double>(max_width) / src_width : 1e9;
+  double scale_h = (max_height > 0) ? static_cast<double>(max_height) / src_height : 1e9;
+  double scale = std::min(scale_w, scale_h);
+
+  out_width = static_cast<uint32_t>(src_width * scale);
+  out_height = static_cast<uint32_t>(src_height * scale);
+
+  // Ensure even dimensions (required for I420 and H.264).
+  out_width &= ~1U;
+  out_height &= ~1U;
+
+  // Safety: minimum 2x2.
+  if (out_width < 2) out_width = 2;
+  if (out_height < 2) out_height = 2;
+}
+
+void DownsampleRGB(const uint8_t* src, uint32_t src_width, uint32_t src_height, size_t src_stride, uint8_t* dst,
+                   uint32_t dst_width, uint32_t dst_height, size_t dst_stride) {
+  // Bilinear interpolation for smooth downsampling.
+  for (uint32_t dst_row = 0; dst_row < dst_height; ++dst_row) {
+    // Map destination row to fractional source position.
+    float src_y =
+        (static_cast<float>(dst_row) + 0.5f) * static_cast<float>(src_height) / static_cast<float>(dst_height) - 0.5f;
+    if (src_y < 0) src_y = 0;
+    auto sy0 = static_cast<uint32_t>(src_y);
+    uint32_t sy1 = std::min(sy0 + 1, src_height - 1);
+    float fy = src_y - static_cast<float>(sy0);
+
+    const uint8_t* row0 = src + sy0 * src_stride;
+    const uint8_t* row1 = src + sy1 * src_stride;
+    uint8_t* dst_line = dst + dst_row * dst_stride;
+
+    for (uint32_t dst_col = 0; dst_col < dst_width; ++dst_col) {
+      float src_x =
+          (static_cast<float>(dst_col) + 0.5f) * static_cast<float>(src_width) / static_cast<float>(dst_width) - 0.5f;
+      if (src_x < 0) src_x = 0;
+      auto sx0 = static_cast<uint32_t>(src_x);
+      uint32_t sx1 = std::min(sx0 + 1, src_width - 1);
+      float fx = src_x - static_cast<float>(sx0);
+
+      // Four source pixels.
+      const uint8_t* p00 = row0 + sx0 * 3;
+      const uint8_t* p10 = row0 + sx1 * 3;
+      const uint8_t* p01 = row1 + sx0 * 3;
+      const uint8_t* p11 = row1 + sx1 * 3;
+
+      uint8_t* dp = dst_line + dst_col * 3;
+      for (int ch = 0; ch < 3; ++ch) {
+        float top = static_cast<float>(p00[ch]) * (1 - fx) + static_cast<float>(p10[ch]) * fx;
+        float bot = static_cast<float>(p01[ch]) * (1 - fx) + static_cast<float>(p11[ch]) * fx;
+        dp[ch] = static_cast<uint8_t>(top * (1 - fy) + bot * fy + 0.5f);
+      }
+    }
+  }
+}
+
 }  // namespace dex::video_monitor

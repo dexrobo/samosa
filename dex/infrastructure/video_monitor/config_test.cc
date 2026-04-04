@@ -58,9 +58,11 @@ shm_name = "/cam0"
   EXPECT_EQ(config.server.port, 8080);
 
   ASSERT_EQ(config.topics.size(), 1u);
-  EXPECT_EQ(config.topics[0].target_fps, 30u);
-  EXPECT_EQ(config.topics[0].bitrate_kbps, 2000u);
-  EXPECT_EQ(config.topics[0].keyframe_interval, 60u);
+  EXPECT_EQ(config.topics[0].target_fps, 15u);
+  EXPECT_EQ(config.topics[0].bitrate_kbps, 1500u);
+  EXPECT_EQ(config.topics[0].keyframe_interval, 30u);
+  EXPECT_EQ(config.topics[0].max_width, 1280u);
+  EXPECT_EQ(config.topics[0].max_height, 720u);
   EXPECT_EQ(config.topics[0].endpoint, "cam0");
 }
 

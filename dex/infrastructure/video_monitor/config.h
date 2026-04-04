@@ -10,9 +10,11 @@ namespace dex::video_monitor {
 struct TopicConfig {
   std::string shm_name;  // Shared memory segment name (e.g., "/front_camera").
   std::string endpoint;  // HTTP path suffix (e.g., "front_camera").
-  uint32_t target_fps{30};
-  uint32_t bitrate_kbps{2000};
-  uint32_t keyframe_interval{60};
+  uint32_t target_fps{15};
+  uint32_t bitrate_kbps{1500};
+  uint32_t keyframe_interval{30};
+  uint32_t max_width{1280};  // Downsample to fit. 0 = no limit (use source resolution).
+  uint32_t max_height{720};  // Downsample to fit. 0 = no limit.
 };
 
 struct ServerConfig {

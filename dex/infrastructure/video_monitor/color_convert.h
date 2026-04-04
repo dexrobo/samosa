@@ -27,6 +27,17 @@ enum class PixelFormat {
 void ConvertToI420(const uint8_t* src, size_t src_stride, uint8_t* dst_y, uint8_t* dst_u, uint8_t* dst_v,
                    uint32_t width, uint32_t height, PixelFormat format);
 
+/// Compute output dimensions that fit within max_width x max_height while
+/// preserving aspect ratio. Ensures both dimensions are even.
+/// If the source already fits, returns the source dimensions unchanged.
+void ComputeScaledDimensions(uint32_t src_width, uint32_t src_height, uint32_t max_width, uint32_t max_height,
+                             uint32_t& out_width, uint32_t& out_height);
+
+/// Downsample RGB24/BGR24 image using nearest-neighbor sampling.
+/// Source and destination are both 3-bytes-per-pixel interleaved.
+void DownsampleRGB(const uint8_t* src, uint32_t src_width, uint32_t src_height, size_t src_stride, uint8_t* dst,
+                   uint32_t dst_width, uint32_t dst_height, size_t dst_stride);
+
 }  // namespace dex::video_monitor
 
 #endif  // DEX_INFRASTRUCTURE_VIDEO_MONITOR_COLOR_CONVERT_H

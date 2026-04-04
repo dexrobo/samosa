@@ -31,6 +31,8 @@ MonitorConfig ParseToml(const toml::table& tbl) {
         if (auto val = (*topic_tbl)["bitrate_kbps"].value<int64_t>()) topic.bitrate_kbps = static_cast<uint32_t>(*val);
         if (auto val = (*topic_tbl)["keyframe_interval"].value<int64_t>())
           topic.keyframe_interval = static_cast<uint32_t>(*val);
+        if (auto val = (*topic_tbl)["max_width"].value<int64_t>()) topic.max_width = static_cast<uint32_t>(*val);
+        if (auto val = (*topic_tbl)["max_height"].value<int64_t>()) topic.max_height = static_cast<uint32_t>(*val);
 
         // Default endpoint from shm_name: strip leading '/' and replace '/' with '_'.
         if (topic.endpoint.empty() && !topic.shm_name.empty()) {

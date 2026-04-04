@@ -79,6 +79,7 @@ void TopicPipeline::Run() {
     std::unique_ptr<H264Encoder> encoder;
     std::unique_ptr<FMP4Muxer> muxer;
     std::vector<uint8_t> yuv_buf;
+    std::vector<uint8_t> downsampled_rgb;  // Scratch buffer for downsampled frames.
     uint64_t frame_count = 0;
     const uint32_t timescale = 90000;
 
@@ -89,6 +90,11 @@ void TopicPipeline::Run() {
 
     // Track previous frame timestamp for /status FPS measurement.
     uint64_t prev_timestamp_nanos = 0;
+
+    // Frame rate limiting: skip frames to meet target_fps.
+    auto last_encode_time = std::chrono::steady_clock::now();
+    const auto min_frame_interval =
+        std::chrono::microseconds(config_.target_fps > 0 ? 1000000 / config_.target_fps : 66667);
 
     // Helper to (re-)initialize encoder and muxer.
     auto init_encoder = [&](uint32_t width, uint32_t height, PixelFormat format) -> bool {
@@ -129,14 +135,30 @@ void TopicPipeline::Run() {
     // the new data.
     monitor.Run(
         [&](const dex::camera::CameraFrameBuffer& frame) {
-          uint32_t width = frame.color_width;
-          uint32_t height = frame.color_height;
+          // Frame rate limiting: skip frames that arrive faster than target_fps.
+          auto now = std::chrono::steady_clock::now();
+          if (now - last_encode_time < min_frame_interval) {
+            return;
+          }
+          last_encode_time = now;
 
-          if (width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0) {
+          uint32_t src_width = frame.color_width;
+          uint32_t src_height = frame.color_height;
+
+          if (src_width == 0 || src_height == 0 || src_width % 2 != 0 || src_height % 2 != 0) {
             return;  // Invalid dimensions.
           }
 
           auto pixel_format = DetectPixelFormat(frame);
+
+          // Compute encode dimensions (downsampled to fit max_width x max_height).
+          uint32_t width = src_width;
+          uint32_t height = src_height;
+          bool needs_downsample = false;
+          if (config_.max_width > 0 || config_.max_height > 0) {
+            ComputeScaledDimensions(src_width, src_height, config_.max_width, config_.max_height, width, height);
+            needs_downsample = (width != src_width || height != src_height);
+          }
 
           // H1: Detect resolution or format change — re-initialize encoder.
           bool needs_init = !encoder;
@@ -153,10 +175,21 @@ void TopicPipeline::Run() {
 
           stats_.SetState(PipelineState::kStreaming);
 
-          // Color convert.
+          // Downsample if needed, then color convert to I420.
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          ConvertToI420(reinterpret_cast<const uint8_t*>(frame.color_image_bytes.data()), width * 3, yuv_buf.data(),
-                        yuv_buf.data() + static_cast<size_t>(width) * height,
+          const uint8_t* rgb_src = reinterpret_cast<const uint8_t*>(frame.color_image_bytes.data());
+          size_t rgb_stride = static_cast<size_t>(src_width) * 3;
+
+          if (needs_downsample) {
+            size_t dst_stride = static_cast<size_t>(width) * 3;
+            downsampled_rgb.resize(dst_stride * height);
+            DownsampleRGB(rgb_src, src_width, src_height, rgb_stride, downsampled_rgb.data(), width, height,
+                          dst_stride);
+            rgb_src = downsampled_rgb.data();
+            rgb_stride = dst_stride;
+          }
+
+          ConvertToI420(rgb_src, rgb_stride, yuv_buf.data(), yuv_buf.data() + static_cast<size_t>(width) * height,
                         yuv_buf.data() + static_cast<size_t>(width) * height + (width / 2) * (height / 2), width,
                         height, pixel_format);
 
