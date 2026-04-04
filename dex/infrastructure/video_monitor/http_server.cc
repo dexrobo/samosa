@@ -113,6 +113,7 @@ constexpr const char* kDashboardPageTemplate = R"html(<!DOCTYPE html>
                  pointer-events: none; z-index: 2; display: flex; align-items: center; gap: 6px; }
   .tile .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
   .dot.live { background: #4f4; animation: pulse 1s infinite; }
+  .dot.starting { background: #fa0; animation: pulse 0.5s infinite; }
   .dot.stale { background: #fa0; }
   .dot.offline { background: #f44; }
   @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
@@ -240,7 +241,7 @@ function createPlayer(topic) {
   });
 
   grid.appendChild(tile);
-  return { name: topic.name, dot: dot, hudRight: hudRight };
+  return { name: topic.name, dot: dot, hudRight: hudRight, video: video };
 }
 
 const players = topics.map(createPlayer);
@@ -253,10 +254,15 @@ setInterval(async () => {
     for (const p of players) {
       const t = data.topics[p.name];
       if (!t) continue;
-      // Status dot.
-      p.dot.className = 'dot ' + (
-        t.state === 'streaming' && t.last_frame_ago_ms < 2000 ? 'live' :
-        t.state === 'streaming' || t.state === 'waiting_for_frames' ? 'stale' : 'offline');
+      // Status dot based on server state + client-side video buffer.
+      const hasVideo = p.video.buffered.length > 0;
+      const serverLive = t.state === 'streaming' && t.last_frame_ago_ms < 2000;
+      let dotClass;
+      if (serverLive && hasVideo) dotClass = 'live';           // green pulsing: playing
+      else if (serverLive && !hasVideo) dotClass = 'starting'; // yellow pulsing: encoder warming up
+      else if (t.state === 'waiting_for_shm') dotClass = 'offline'; // red: no shm
+      else dotClass = 'stale';                                 // yellow solid: no data
+      p.dot.className = 'dot ' + dotClass;
       // Right HUD: fps, clients, drops.
       const parts = [];
       parts.push(t.measured_fps.toFixed(1) + ' fps');
@@ -387,20 +393,27 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
           [ring](size_t /*offset*/, httplib::DataSink& sink) -> bool {
             uint64_t last_seq = 0;
 
-            // First read: get init segment + fragments from latest IDR.
-            auto result = ring->ReadFrom(0);
-            if (result.init_segment.has_value()) {
-              if (!sink.write(reinterpret_cast<const char*>(result.init_segment->data()),
-                              result.init_segment->size())) {
-                return false;  // Client disconnected.
+            // Wait for init segment if not available yet (lazy encoding cold start).
+            while (true) {
+              auto result = ring->ReadFrom(0);
+              if (result.init_segment.has_value()) {
+                if (!sink.write(reinterpret_cast<const char*>(result.init_segment->data()),
+                                result.init_segment->size())) {
+                  return false;
+                }
+                for (const auto& frag : result.fragments) {
+                  if (!sink.write(reinterpret_cast<const char*>(frag->data()), frag->size())) {
+                    return false;
+                  }
+                }
+                last_seq = result.last_sequence;
+                break;
+              }
+              // No init segment yet — wait for data to arrive.
+              if (!ring->WaitForNew(0, std::chrono::milliseconds(1000))) {
+                continue;  // Timeout, retry.
               }
             }
-            for (const auto& frag : result.fragments) {
-              if (!sink.write(reinterpret_cast<const char*>(frag->data()), frag->size())) {
-                return false;
-              }
-            }
-            last_seq = result.last_sequence;
 
             // Streaming loop: wait for new fragments and send them.
             while (true) {

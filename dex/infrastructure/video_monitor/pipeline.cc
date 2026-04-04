@@ -135,17 +135,18 @@ void TopicPipeline::Run() {
     // the new data.
     monitor.Run(
         [&](const dex::camera::CameraFrameBuffer& frame) {
+          // Lazy encoding: skip if no clients are connected.
+          // Sleep briefly to avoid burning CPU on the 20MB frame copy from Monitor::Run().
+          if (ring_.ClientCount() == 0) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            return;
+          }
+
           // Frame rate limiting: skip frames that arrive faster than target_fps.
           auto now = std::chrono::steady_clock::now();
           if (now - last_encode_time < min_frame_interval) {
             return;
           }
-
-          // Lazy encoding: skip if no clients are connected.
-          if (ring_.ClientCount() == 0) {
-            return;
-          }
-
           last_encode_time = now;
 
           uint32_t src_width = frame.color_width;
