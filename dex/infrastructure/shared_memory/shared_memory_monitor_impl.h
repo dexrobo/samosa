@@ -200,7 +200,8 @@ auto Monitor<Buffer, buffer_size, SharedMemoryBuffer>::CopyLatestSnapshotInto(Bu
     const uint32_t accepted_sequence =
         detail::GetSequence(gsl::at(shared_memory_buffer_.Get()->slot_sequence_and_writing, candidate.slot_index)
                                 .load(std::memory_order_acquire));
-    if (!detail::IsNewerSequence(accepted_sequence, minimum_sequence)) {
+    // Reject if we already delivered this exact sequence (duplicate read).
+    if (accepted_sequence == minimum_sequence) {
       return std::nullopt;
     }
 
@@ -258,9 +259,11 @@ void Monitor<Buffer, buffer_size, SharedMemoryBuffer>::Run(auto&& monitor_fn, do
     const uint32_t packed = shared_memory_buffer_.Get()->sequence_and_writing.load(std::memory_order_acquire);
     const uint32_t current_sequence = detail::GetSequence(packed);
 
-    // If there's new data
-    if (detail::IsNewerSequence(current_sequence, last_observed_sequence)) {
-      auto accepted_sequence = CopyLatestSnapshotInto(*buffer_cache, timeout_sec, read_mode, last_observed_sequence);
+    // If there's new data — the sequence changed from what we last observed.
+    // Simple inequality handles normal increments, sequence wraps, and
+    // producer restarts (sequence reset) uniformly.
+    if (current_sequence != detail::kNoCompletedMonitorSequence && current_sequence != last_observed_sequence) {
+      auto accepted_sequence = CopyLatestSnapshotInto(*buffer_cache, timeout_sec, read_mode);
       if (accepted_sequence) {
         detail::InvokeMonitor(monitor_fn, *buffer_cache, *accepted_sequence);
         last_observed_sequence = *accepted_sequence;
