@@ -78,6 +78,7 @@ bazel_dep(name = "fmt", version = "12.1.0", repo_name = "com_github_fmtlib_fmt")
 
 # Video monitor dependencies
 bazel_dep(name = "tomlplusplus", version = "3.4.0")
+bazel_dep(name = "rules_nasm", version = "0.5.0")
 # cpp-httplib: using http_archive instead of BCR to avoid boringssl SSL dep
 # (not needed for local network video monitoring, and boringssl C files fail
 # with the project's --copt=-std=c++20 flag)
