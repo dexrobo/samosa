@@ -1,0 +1,164 @@
+load("@rules_cc//cc:defs.bzl", "cc_binary", "cc_library", "cc_test")
+
+package(default_visibility = ["//dex/infrastructure/video_monitor:__subpackages__"])
+
+SPDLOG = "@com_github_gabime_spdlog//:spdlog"
+
+GSL = "@com_github_microsoft_gsl//:gsl"
+
+GTEST = "@com_google_googletest//:gtest_main"
+
+cc_library(
+    name = "color_convert",
+    srcs = ["color_convert.cc"],
+    hdrs = ["color_convert.h"],
+)
+
+cc_test(
+    name = "color_convert_test",
+    size = "small",
+    srcs = ["color_convert_test.cc"],
+    deps = [
+        ":color_convert",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "encoder",
+    srcs = ["encoder.cc"],
+    hdrs = ["encoder.h"],
+    deps = [
+        "@openh264",
+        SPDLOG,
+    ],
+)
+
+cc_test(
+    name = "encoder_test",
+    size = "small",
+    srcs = ["encoder_test.cc"],
+    deps = [
+        ":encoder",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "fmp4_muxer",
+    srcs = ["fmp4_muxer.cc"],
+    hdrs = ["fmp4_muxer.h"],
+)
+
+cc_test(
+    name = "fmp4_muxer_test",
+    size = "small",
+    srcs = ["fmp4_muxer_test.cc"],
+    deps = [
+        ":fmp4_muxer",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "fragment_ring",
+    srcs = ["fragment_ring.cc"],
+    hdrs = ["fragment_ring.h"],
+)
+
+cc_test(
+    name = "fragment_ring_test",
+    size = "small",
+    srcs = ["fragment_ring_test.cc"],
+    deps = [
+        ":fragment_ring",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "config",
+    srcs = ["config.cc"],
+    hdrs = ["config.h"],
+    deps = [
+        "@tomlplusplus",
+        SPDLOG,
+    ],
+)
+
+cc_test(
+    name = "config_test",
+    size = "small",
+    srcs = ["config_test.cc"],
+    deps = [
+        ":config",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "time_base",
+    hdrs = ["time_base.h"],
+)
+
+cc_test(
+    name = "encoder_muxer_integration_test",
+    size = "small",
+    srcs = ["encoder_muxer_integration_test.cc"],
+    deps = [
+        ":encoder",
+        ":fmp4_muxer",
+        GTEST,
+    ],
+)
+
+cc_library(
+    name = "pipeline_stats",
+    hdrs = ["pipeline_stats.h"],
+)
+
+cc_library(
+    name = "pipeline",
+    srcs = ["pipeline.cc"],
+    hdrs = ["pipeline.h"],
+    deps = [
+        ":color_convert",
+        ":config",
+        ":encoder",
+        ":fmp4_muxer",
+        ":fragment_ring",
+        ":pipeline_stats",
+        ":time_base",
+        "//dex/drivers/camera/base:types",
+        "//dex/infrastructure/shared_memory:shared_memory_monitor",
+        SPDLOG,
+    ],
+)
+
+cc_library(
+    name = "http_server",
+    srcs = ["http_server.cc"],
+    hdrs = ["http_server.h"],
+    deps = [
+        ":config",
+        ":fragment_ring",
+        ":pipeline_stats",
+        "@cpp_httplib",
+        SPDLOG,
+    ],
+)
+
+cc_binary(
+    name = "video_monitor",
+    srcs = ["main.cc"],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":config",
+        ":fragment_ring",
+        ":http_server",
+        ":pipeline",
+        "//dex/infrastructure/shared_memory:shared_memory_streaming",
+        "@com_github_fmtlib_fmt//:fmt",
+        SPDLOG,
+    ],
+)

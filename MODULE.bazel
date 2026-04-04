@@ -76,6 +76,12 @@ bazel_dep(name = "re2", version = "2025-11-05.bcr.1")
 # fmt
 bazel_dep(name = "fmt", version = "12.1.0", repo_name = "com_github_fmtlib_fmt")
 
+# Video monitor dependencies
+bazel_dep(name = "tomlplusplus", version = "3.4.0")
+# cpp-httplib: using http_archive instead of BCR to avoid boringssl SSL dep
+# (not needed for local network video monitoring, and boringssl C files fail
+# with the project's --copt=-std=c++20 flag)
+
 # Binaries for formatting
 http_file = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_file")
 
@@ -113,4 +119,23 @@ http_file(
     name = "yamlfmt_arm64",
     sha256 = "b8820250488579c5194e2ee8f9def65187188b43231c557d1c9644504a1b1ada",
     url = "https://github.com/google/yamlfmt/releases/download/v0.15.0/yamlfmt_0.15.0_Linux_arm64.tar.gz",
+)
+
+# OpenH264 (BSD-2-Clause) — H.264 encoder for video monitor
+http_archive = use_repo_rule("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive")
+
+http_archive(
+    name = "cpp_httplib",
+    build_file = "//third_party:cpp_httplib.BUILD",
+    sha256 = "fcfea48c8f2c386e7085ef8545c8a4875efa30fa6d5cf9dd31f03c6ad038da9d",
+    strip_prefix = "cpp-httplib-0.22.0",
+    url = "https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.22.0.tar.gz",
+)
+
+http_archive(
+    name = "openh264",
+    build_file = "//third_party:openh264.BUILD",
+    sha256 = "558544ad358283a7ab2930d69a9ceddf913f4a51ee9bf1bfb9e377322af81a69",
+    strip_prefix = "openh264-2.6.0",
+    url = "https://github.com/cisco/openh264/archive/refs/tags/v2.6.0.tar.gz",
 )
