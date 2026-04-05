@@ -63,11 +63,14 @@ class FragmentRing {
   [[nodiscard]] uint64_t HeadSequence() const;
 
   /// Client tracking — called by HTTP handlers on connect/disconnect.
-  void AddClient() { clients_.fetch_add(1, std::memory_order_relaxed); }
-
-  void RemoveClient() { clients_.fetch_sub(1, std::memory_order_relaxed); }
+  void AddClient();
+  void RemoveClient();
 
   [[nodiscard]] uint32_t ClientCount() const { return clients_.load(std::memory_order_relaxed); }
+
+  /// Block until at least one client is connected, shutdown, or timeout.
+  /// Returns true if a client is connected, false on timeout/shutdown.
+  bool WaitForClient(std::chrono::milliseconds timeout) const;
 
  private:
   mutable std::mutex mutex_;

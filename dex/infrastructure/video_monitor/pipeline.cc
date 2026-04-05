@@ -128,21 +128,22 @@ void TopicPipeline::Run() {
       return true;
     };
 
-    // Monitor::Run() manages the read loop, heap-allocates the ~20MB frame buffer
-    // internally, and respects StreamingControl for graceful shutdown. When the
-    // producer restarts (re-initializing the shared memory), the core library's
-    // InitializeBuffer wakes blocked futex waiters, allowing Run() to pick up
-    // the new data.
+    // Monitor::Run() with lazy encoding via blocking in the callback.
+    // When idle (no clients): the callback blocks on WaitForClient(), freezing
+    // Run()'s loop — no futex wakes, no 20MB frame copies, near-zero CPU.
+    // When active: Run() uses efficient futex-based waits between frames.
     monitor.Run(
         [&](const dex::camera::CameraFrameBuffer& frame) {
-          // Lazy encoding: skip if no clients are connected.
-          // Sleep briefly to avoid burning CPU on the 20MB frame copy from Monitor::Run().
+          // Lazy encoding: block until a client connects (or shutdown).
           if (ring_.ClientCount() == 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            return;
+            stats_.SetState(PipelineState::kWaitingForFrames);
+            while (ring_.ClientCount() == 0 && !stop_requested_.load() && streaming_control.IsRunning()) {
+              ring_.WaitForClient(std::chrono::milliseconds(500));
+            }
+            return;  // Skip this stale frame — Run() gets a fresh one.
           }
 
-          // Frame rate limiting: skip frames that arrive faster than target_fps.
+          // Frame rate limiting.
           auto now = std::chrono::steady_clock::now();
           if (now - last_encode_time < min_frame_interval) {
             return;
@@ -153,12 +154,11 @@ void TopicPipeline::Run() {
           uint32_t src_height = frame.color_height;
 
           if (src_width == 0 || src_height == 0 || src_width % 2 != 0 || src_height % 2 != 0) {
-            return;  // Invalid dimensions.
+            return;
           }
 
           auto pixel_format = DetectPixelFormat(frame);
 
-          // Compute encode dimensions (downsampled to fit max_width x max_height).
           uint32_t width = src_width;
           uint32_t height = src_height;
           bool needs_downsample = false;
@@ -167,7 +167,6 @@ void TopicPipeline::Run() {
             needs_downsample = (width != src_width || height != src_height);
           }
 
-          // H1: Detect resolution or format change — re-initialize encoder.
           bool needs_init = !encoder;
           if (encoder && (width != enc_width || height != enc_height || pixel_format != enc_format)) {
             SPDLOG_WARN("Stream '{}' changed: {}x{} -> {}x{}", config_.endpoint, enc_width, enc_height, width, height);
@@ -182,7 +181,6 @@ void TopicPipeline::Run() {
 
           stats_.SetState(PipelineState::kStreaming);
 
-          // Downsample if needed, then color convert to I420.
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
           const uint8_t* rgb_src = reinterpret_cast<const uint8_t*>(frame.color_image_bytes.data());
           size_t rgb_stride = static_cast<size_t>(src_width) * 3;
@@ -200,7 +198,6 @@ void TopicPipeline::Run() {
                         yuv_buf.data() + static_cast<size_t>(width) * height + (width / 2) * (height / 2), width,
                         height, pixel_format);
 
-          // Encode.
           uint64_t timestamp_us = TimeBase::Instance().MicrosecondsSinceStart();
           auto encoded = encoder->Encode(yuv_buf.data(), timestamp_us);
           if (!encoded.has_value()) {
@@ -208,7 +205,6 @@ void TopicPipeline::Run() {
             return;
           }
 
-          // On first IDR (or after re-init), extract SPS/PPS and create the muxer + init segment.
           if (!muxer && encoded->is_idr) {
             std::vector<uint8_t> sps, pps;
             if (ExtractSPSPPS(encoded->nals, sps, pps)) {
@@ -225,17 +221,10 @@ void TopicPipeline::Run() {
             }
           }
 
-          if (!muxer) {
-            return;  // Waiting for first IDR to create muxer.
-          }
+          if (!muxer) return;
 
-          // Fixed frame duration for smooth playback. The monitor samples
-          // opportunistically (may skip frames), so VFR durations from
-          // timestamp_nanos cause stuttering. Fixed duration means every
-          // received frame displays for 1/target_fps regardless of gaps.
           const uint32_t duration = timescale / config_.target_fps;
 
-          // Update measured FPS from producer timestamps (for /status only).
           uint64_t frame_timestamp_nanos = frame.timestamp_nanos;
           if (prev_timestamp_nanos > 0 && frame_timestamp_nanos > prev_timestamp_nanos) {
             uint64_t delta_nanos = frame_timestamp_nanos - prev_timestamp_nanos;
@@ -246,12 +235,9 @@ void TopicPipeline::Run() {
           }
           prev_timestamp_nanos = frame_timestamp_nanos;
 
-          // Mux into fMP4 fragment. Decode time uses fixed-rate accumulation
-          // (frame_count * duration) for consistent playback timing.
           uint64_t decode_time = static_cast<uint64_t>(frame_count) * duration;
           auto fragment_data = muxer->MuxFragment(encoded->nals, decode_time, duration, encoded->is_idr);
 
-          // Push to ring for HTTP fan-out.
           auto shared_data = std::make_shared<const std::vector<uint8_t>>(std::move(fragment_data));
           ring_.Push(Fragment{
               .data = std::move(shared_data),
@@ -267,8 +253,7 @@ void TopicPipeline::Run() {
               std::memory_order_relaxed);
           ++frame_count;
         },
-        0.1,                                                  // timeout_sec
-        dex::shared_memory::MonitorReadMode::Opportunistic);  // best-effort reads
+        0.1, dex::shared_memory::MonitorReadMode::Opportunistic);
 
     if (frame_count > 0) {
       SPDLOG_INFO("Pipeline '{}' encoded {} frames", config_.endpoint, frame_count);

@@ -97,4 +97,16 @@ uint64_t FragmentRing::HeadSequence() const {
   return head_sequence_;
 }
 
+void FragmentRing::AddClient() {
+  clients_.fetch_add(1, std::memory_order_relaxed);
+  cv_.notify_all();  // Wake pipelines waiting for clients.
+}
+
+void FragmentRing::RemoveClient() { clients_.fetch_sub(1, std::memory_order_relaxed); }
+
+bool FragmentRing::WaitForClient(std::chrono::milliseconds timeout) const {
+  std::unique_lock lock(mutex_);
+  return cv_.wait_for(lock, timeout, [&] { return clients_.load(std::memory_order_relaxed) > 0 || shutdown_; });
+}
+
 }  // namespace dex::video_monitor
