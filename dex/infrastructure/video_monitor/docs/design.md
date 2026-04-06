@@ -22,13 +22,15 @@ dex/infrastructure/video_monitor/
         architecture.md
         design.md
     main.cc                             # Entry point, config, orchestration
-    config.h / config.cc                # TOML parsing + CLI overrides
-    pipeline.h / pipeline.cc            # TopicPipeline: monitor -> encode -> mux -> broadcast
+    config.h / config.cc                # TOML parsing + CLI overrides + validation
+    pipeline.h / pipeline.cc            # TopicPipeline: monitor -> downsample -> encode -> mux -> broadcast
+    pipeline_stats.h                    # PipelineStats atomic counters
     encoder.h / encoder.cc              # OpenH264 wrapper
-    color_convert.h / color_convert.cc  # RGB24/BGR24 -> I420
+    color_convert.h / color_convert.cc  # RGB24/BGR24 -> I420 (NEON asm / NASM asm via select())
+    downsample.h / downsample.cc        # Bilinear downsampling to max_width/max_height
     fmp4_muxer.h / fmp4_muxer.cc       # Minimal ISO BMFF fMP4 muxer
-    fragment_ring.h / fragment_ring.cc  # Broadcast ring buffer
-    http_server.h / http_server.cc      # HTTP endpoint setup
+    fragment_ring.h / fragment_ring.cc  # Broadcast ring buffer + client tracking
+    http_server.h / http_server.cc      # HTTP endpoint setup + dashboard + status
     time_base.h                         # Shared monotonic clock singleton
 ```
 
@@ -40,9 +42,11 @@ dex/infrastructure/video_monitor/
 struct TopicConfig {
     std::string shm_name;           // Shared memory segment name (e.g., "/front_camera")
     std::string endpoint;           // HTTP path suffix (e.g., "front_camera")
-    uint32_t target_fps = 30;
-    uint32_t bitrate_kbps = 2000;
-    uint32_t keyframe_interval = 60; // Frames between IDRs
+    uint32_t target_fps = 15;
+    uint32_t bitrate_kbps = 1500;
+    uint32_t keyframe_interval = 30; // Frames between IDRs
+    uint32_t max_width = 1280;       // Bilinear downsample cap
+    uint32_t max_height = 720;       // Bilinear downsample cap
 };
 
 struct ServerConfig {
@@ -125,7 +129,7 @@ public:
 
     // Producer (single writer)
     void Push(Fragment fragment);
-    void SetInitSegment(std::vector<uint8_t> init);
+    void SetInitSegment(std::vector<uint8_t> init);  // Invalidates old fragments on reinit
 
     // Consumer (multiple readers)
     struct ReadResult {
@@ -135,6 +139,11 @@ public:
     };
     ReadResult ReadFrom(uint64_t after_sequence) const;
     bool WaitForNew(uint64_t after_sequence, std::chrono::milliseconds timeout) const;
+
+    // Client tracking (lazy encoding gate)
+    void AddClient();
+    void RemoveClient();
+    void WaitForClient();  // Blocks pipeline when client_count_ == 0
 
     // Shutdown
     void NotifyAll();
@@ -176,6 +185,22 @@ public:
 };
 ```
 
+### PipelineStats (`pipeline_stats.h`)
+
+```cpp
+struct PipelineStats {
+    std::atomic<uint64_t> frames_encoded{0};
+    std::atomic<uint64_t> frames_dropped{0};
+    std::atomic<uint64_t> last_frame_timestamp_ns{0};
+    std::atomic<uint32_t> width{0};
+    std::atomic<uint32_t> height{0};
+    std::atomic<uint32_t> encoder_reinits{0};
+    std::atomic<uint32_t> measured_fps_x10{0};  // e.g. 148 = 14.8 fps
+};
+```
+
+Updated atomically by each pipeline thread. Read lock-free by the `/status` HTTP handler.
+
 ## Color Conversion
 
 RGB24/BGR24 to I420 (YUV 4:2:0 planar) using BT.601 coefficients:
@@ -188,6 +213,10 @@ Cr =  0.500 * R - 0.419 * G - 0.081 * B + 128
 
 Processes 2 rows at a time (chroma is subsampled 2x2 in I420). Format auto-detected
 from `CameraFrameBuffer::color_format` field — swap R/B coefficients for BGR24.
+
+Platform-specific SIMD via Bazel `select()`:
+* **ARM64**: NEON assembly intrinsics
+* **x86_64**: NASM assembly
 
 ## Configuration
 
@@ -202,9 +231,11 @@ fragment_ring_size = 120
 [[topics]]
 shm_name = "/front_camera"
 endpoint = "front_camera"
-target_fps = 30
-bitrate_kbps = 2000
-keyframe_interval = 60
+target_fps = 15
+bitrate_kbps = 1500
+keyframe_interval = 30
+max_width = 1280
+max_height = 720
 
 [[topics]]
 shm_name = "/rear_camera"
@@ -212,16 +243,20 @@ endpoint = "rear_camera"
 target_fps = 15
 bitrate_kbps = 1000
 keyframe_interval = 30
+max_width = 640
+max_height = 480
 ```
 
 ### CLI Overrides
 
 ```bash
 video_monitor --config /etc/video_monitor.toml --port 9090 --topic /cam0
+video_monitor --help
 ```
 
 CLI flags override config file values. `--topic` adds a topic with default settings
-when no config file is provided.
+when no config file is provided. Unknown flags are rejected with an error message.
+`--help` prints usage and exits. Duplicate topics are deduplicated.
 
 ## Error Handling
 
@@ -244,9 +279,9 @@ when no config file is provided.
 
 ## Risks and Mitigations
 
-| Risk | Mitigation |
-|---|---|
-| OpenH264 Bazel build complexity (NASM for x86 asm) | Start with C-only fallbacks. Add NASM toolchain if perf insufficient. |
-| fMP4 spec non-compliance | Validate all output with ffprobe. Byte-level box structure assertions in tests. |
-| `color_format` changes mid-stream | Detect format per-frame. Re-init encoder if dimensions or format change. |
-| OpenH264 encoding too slow for use case | Profile. If needed: reduce resolution, lower target FPS, or add NASM asm. |
+| Risk | Mitigation | Status |
+|---|---|---|
+| OpenH264 Bazel build complexity (NASM for x86 asm) | ARM64 NEON asm + x86_64 NASM asm via platform `select()`. | Resolved |
+| fMP4 spec non-compliance | Validate all output with ffprobe. Byte-level box structure assertions in tests. | Ongoing |
+| `color_format` changes mid-stream | Detect format per-frame. Re-init encoder if dimensions or format change. `SetInitSegment()` invalidates stale fragments. | Resolved |
+| Encoding too slow for use case | Bilinear downsampling to configurable `max_width`/`max_height` (default 1280x720). Lazy encoding skips work when 0 clients. | Resolved |

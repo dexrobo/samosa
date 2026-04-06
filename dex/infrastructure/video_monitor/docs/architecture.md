@@ -5,8 +5,11 @@
 ```text
 SharedMem Topic A ──> Pipeline Thread A ──> FragmentRing A ──┐
 SharedMem Topic B ──> Pipeline Thread B ──> FragmentRing B ──┤──> HTTP Server Thread
-SharedMem Topic C ──> Pipeline Thread C ──> FragmentRing C ──┘     GET /stream/{topic}
-                                                                    GET /topics
+SharedMem Topic C ──> Pipeline Thread C ──> FragmentRing C ──┘     GET /          (tiled dashboard)
+                                                                    GET /view/{topic} (single MSE player)
+                                                                    GET /stream/{topic} (raw fMP4)
+                                                                    GET /topics    (JSON list)
+                                                                    GET /status    (per-topic stats)
 ```
 
 The binary runs three types of threads:
@@ -20,21 +23,24 @@ The binary runs three types of threads:
 Each topic runs an independent pipeline on a dedicated thread:
 
 ```text
-Monitor::ReadInto(frame_buf)           // ~16MB copy from shm (passive, non-blocking)
-  -> color_convert(RGB24 -> I420)      // BT.601 matrix, ~2-3ms for 1080p
-  -> OpenH264::Encode(I420) -> NALs   // ~10-15ms for 1080p Baseline
+FragmentRing::WaitForClient()          // CV blocks pipeline when 0 clients (lazy encoding, 0% idle CPU)
+  -> Monitor::Run(callback)            // != sequence check wakes on new frame, InitializeBuffer wakes futex
+  -> downsample(bilinear)              // per-topic max_width/max_height (default 1280x720)
+  -> color_convert(RGB24 -> I420)      // BT.601 matrix, ARM64 NEON asm / x86_64 NASM asm
+  -> OpenH264::Encode(I420) -> NALs   // ~10-15ms for 720p Baseline
   -> FMP4Muxer::Mux(NALs) -> fragment // init segment once, then moof+mdat per frame
   -> FragmentRing::Push(fragment)      // publish for HTTP fan-out
 ```
 
-### Data Sizes (per topic)
+### Data Sizes (per topic, at default 1280x720 cap)
 
 | Buffer | Size | Lifetime |
 |---|---|---|
 | CameraFrameBuffer (read copy) | ~16MB | Thread-local, reused |
-| I420 YUV buffer | ~3MB (1920x1080x1.5) | Thread-local, reused |
-| Encoded NALs | ~10-50KB per frame | Transient |
-| fMP4 fragment | ~10-50KB per frame | Shared via FragmentRing |
+| Downsampled RGB buffer | ~2.8MB (1280x720x3) | Thread-local, reused |
+| I420 YUV buffer | ~1.4MB (1280x720x1.5) | Thread-local, reused |
+| Encoded NALs | ~5-30KB per frame | Transient |
+| fMP4 fragment | ~5-30KB per frame | Shared via FragmentRing |
 
 ## Thread Ownership Model
 
@@ -44,7 +50,7 @@ Monitor::ReadInto(frame_buf)           // ~16MB copy from shm (passive, non-bloc
 |---|---|---|---|
 | Main | 1 | Config, pipeline lifecycle, shutdown | StreamingControl singleton |
 | HTTP server | 1 (+handler pool) | httplib::Server, endpoint routing | FragmentRing (reader) |
-| Pipeline | 1 per topic | Monitor, CameraFrameBuffer, YUV buf, Encoder, Muxer | FragmentRing (sole writer) |
+| Pipeline | 1 per topic | Monitor, CameraFrameBuffer, downsample buf, YUV buf, Encoder, Muxer | FragmentRing (sole writer) |
 
 ### Concurrency Rules
 
@@ -58,9 +64,12 @@ Monitor::ReadInto(frame_buf)           // ~16MB copy from shm (passive, non-bloc
 ### Synchronization
 
 * **Shared memory read path**: uses the existing lock-free atomic protocol (futex +
-  sequence validation). No additional synchronization needed.
+  sequence validation). `InitializeBuffer` wakes futex; `Monitor::Run` uses `!=` sequence
+  check for frame change detection.
 * **FragmentRing fan-out**: uses `std::mutex` + `std::condition_variable`. This is on the
   HTTP serving path, not the shared memory hot path. Acceptable latency.
+* **Lazy encoding gate**: `FragmentRing::WaitForClient()` blocks on `client_cv_` when
+  `client_count_ == 0`. Pipeline thread sleeps with 0% CPU until an HTTP client connects.
 
 ## Broadcast Pattern (FragmentRing)
 
@@ -73,7 +82,9 @@ FragmentRing {
   head_sequence_: uint64        // Monotonic write cursor
   latest_idr_sequence_: uint64  // For late-joiner catch-up
   init_segment_: vector<uint8>  // ftyp+moov, sent to each new client
+  client_count_: atomic<int>    // Active client tracking
   mutex_ + cv_                  // Reader synchronization
+  client_cv_                    // Wakes pipeline when clients connect
 }
 
 Fragment {
@@ -84,18 +95,40 @@ Fragment {
 }
 ```
 
+* Pipeline blocks in `WaitForClient()` when `client_count_ == 0` (lazy encoding, 0% idle CPU)
+* `AddClient()` / `RemoveClient()` update atomic counter and signal `client_cv_`
 * Pipeline pushes fragments with monotonic sequence numbers
 * Each HTTP client maintains its own read cursor (sequence number)
 * Late joiners or slow clients skip to the latest IDR fragment
 * Init segment is sent once per client connection
+* `SetInitSegment()` invalidates old fragments on encoder reinit (resolution/format change)
 
-## HTTP Streaming Protocol
+## HTTP Endpoints
+
+| Endpoint | Method | Description |
+|---|---|---|
+| `/` | GET | Tiled dashboard — grid of all topics, click-to-maximize, status dots, per-tile HUD |
+| `/view/{topic}` | GET | Single-topic MSE player page |
+| `/stream/{topic}` | GET | Raw fMP4 stream (`Content-Type: video/mp4`, chunked transfer encoding) |
+| `/topics` | GET | JSON list of available topics |
+| `/status` | GET | Per-topic stats (JSON) |
+
+### Stream Protocol
 
 1. Client connects: `GET /stream/{topic_name}`
-2. Server responds: `Content-Type: video/mp4`, chunked transfer encoding
-3. First chunk: init segment (ftyp + moov with SPS/PPS in avcC box)
-4. Subsequent chunks: media segments (moof + mdat) as produced by pipeline
-5. Client disconnect: write error caught in handler, handler returns cleanly
+2. Handler waits for init segment before sending (cold start fix — avoids sending data before encoder produces first IDR)
+3. Server responds: `Content-Type: video/mp4`, chunked transfer encoding
+4. First chunk: init segment (ftyp + moov with SPS/PPS in avcC box)
+5. Subsequent chunks: media segments (moof + mdat) as produced by pipeline
+6. Client disconnect: write error caught in handler, handler returns cleanly
+
+### Dashboard
+
+The `/` endpoint serves a tiled grid of all topics. Features: click-to-maximize any tile,
+status dots per tile (green = streaming, yellow = waiting, red = stale), per-tile HUD
+overlay, and automatic page reload on tab refocus.
+
+### Topics Endpoint
 
 The `/topics` endpoint returns JSON:
 
@@ -107,6 +140,30 @@ The `/topics` endpoint returns JSON:
   ]
 }
 ```
+
+### Status Endpoint
+
+The `/status` endpoint returns per-topic stats:
+
+```json
+{
+  "topics": {
+    "front_camera": {
+      "state": "streaming",
+      "width": 1280,
+      "height": 720,
+      "measured_fps_x10": 148,
+      "frames_encoded": 5432,
+      "frames_dropped": 3,
+      "encoder_reinits": 0,
+      "last_frame_ago_ms": 67
+    }
+  }
+}
+```
+
+Pipeline states: `waiting_for_shm` -> `waiting_for_frames` -> `streaming` -> `stale`
+(stale is derived in the `/status` handler when `last_frame_ago_ms > 2000`).
 
 ## Time Synchronization
 
