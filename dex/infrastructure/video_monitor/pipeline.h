@@ -17,7 +17,7 @@ namespace dex::video_monitor {
 /// (monitor, frame buffer, YUV buffer, encoder, muxer).
 class TopicPipeline {
  public:
-  TopicPipeline(const TopicConfig& config, FragmentRing& ring);
+  TopicPipeline(TopicConfig config, FragmentRing& ring);
   ~TopicPipeline();
 
   TopicPipeline(const TopicPipeline&) = delete;

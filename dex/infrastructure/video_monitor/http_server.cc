@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <sstream>
+#include <utility>
 
 #include "httplib.h"
 #include "spdlog/spdlog.h"
@@ -10,7 +11,7 @@ namespace dex::video_monitor {
 
 // Minimal MSE player page. The browser fetches the fMP4 stream via fetch() and
 // appends chunks to a SourceBuffer. This is the standard way to play live fMP4
-// in browsers — <video src="..."> does not support chunked live streams.
+// in browsers -- <video src="..."> does not support chunked live streams.
 // NOLINTBEGIN
 constexpr const char* kPlayerPageTemplate = R"html(<!DOCTYPE html>
 <html><head><meta charset="utf-8"><title>Video Monitor</title>
@@ -132,7 +133,7 @@ constexpr const char* kDashboardPageTemplate = R"html(<!DOCTYPE html>
 const topics = %TOPICS_JSON%;
 const grid = document.getElementById('grid');
 
-// Reload on tab refocus — the fetch stream buffers data while backgrounded
+// Reload on tab refocus -- the fetch stream buffers data while backgrounded
 // and draining the backlog takes too long. A reload reconnects fresh from
 // the latest IDR.
 document.addEventListener('visibilitychange', () => {
@@ -280,16 +281,19 @@ struct HttpServer::Impl {
   httplib::Server server;
 };
 
-HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> endpoints)
-    : config_(config), endpoints_(std::move(endpoints)), impl_(std::make_unique<Impl>()) {
-  // GET /view/{topic} — browser player page using MSE.
-  for (const auto& ep : endpoints_) {
-    std::string view_path = "/view/" + ep.name;
-    std::string stream_path = ep.path;
+// NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+// NOLINTBEGIN(cppcoreguidelines-pro-type-reinterpret-cast)
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
+HttpServer::HttpServer(ServerConfig config, std::vector<TopicEndpoint> endpoints)
+    : config_(std::move(config)), endpoints_(std::move(endpoints)), impl_(std::make_unique<Impl>()) {
+  // GET /view/{topic} -- browser player page using MSE.
+  for (const auto& endpoint : endpoints_) {
+    const std::string view_path = "/view/" + endpoint.name;
+    const std::string stream_path = endpoint.path;
     impl_->server.Get(view_path, [stream_path](const httplib::Request& /*req*/, httplib::Response& res) {
       std::string page = kPlayerPageTemplate;
       // Replace placeholder with the stream URL (relative path works).
-      size_t pos = page.find("%STREAM_URL%");
+      const size_t pos = page.find("%STREAM_URL%");
       if (pos != std::string::npos) {
         page.replace(pos, 12, stream_path);
       }
@@ -297,38 +301,42 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
     });
   }
 
-  // GET / — tiled dashboard showing all topics.
+  // GET / -- tiled dashboard showing all topics.
   impl_->server.Get("/", [this](const httplib::Request& /*req*/, httplib::Response& res) {
     // Build JSON array of topics for the dashboard template.
     std::ostringstream topics_json;
     topics_json << "[";
-    for (size_t i = 0; i < endpoints_.size(); ++i) {
-      if (i > 0) topics_json << ",";
-      topics_json << R"({"name":")" << endpoints_[i].name << R"(","stream":")" << endpoints_[i].path << R"("})";
+    for (size_t idx = 0; idx < endpoints_.size(); ++idx) {
+      if (idx > 0) {
+        topics_json << ",";
+      }
+      topics_json << R"({"name":")" << endpoints_[idx].name << R"(","stream":")" << endpoints_[idx].path << R"("})";
     }
     topics_json << "]";
 
     std::string page = kDashboardPageTemplate;
-    size_t pos = page.find("%TOPICS_JSON%");
+    const size_t pos = page.find("%TOPICS_JSON%");
     if (pos != std::string::npos) {
       page.replace(pos, 13, topics_json.str());
     }
     res.set_content(page, "text/html");
   });
 
-  // GET /topics — list available streams.
+  // GET /topics -- list available streams.
   impl_->server.Get("/topics", [this](const httplib::Request& /*req*/, httplib::Response& res) {
     std::ostringstream json;
     json << R"({"topics":[)";
-    for (size_t i = 0; i < endpoints_.size(); ++i) {
-      if (i > 0) json << ",";
-      json << R"({"name":")" << endpoints_[i].name << R"(","path":")" << endpoints_[i].path << R"("})";
+    for (size_t idx = 0; idx < endpoints_.size(); ++idx) {
+      if (idx > 0) {
+        json << ",";
+      }
+      json << R"({"name":")" << endpoints_[idx].name << R"(","path":")" << endpoints_[idx].path << R"("})";
     }
     json << "]}";
     res.set_content(json.str(), "application/json");
   });
 
-  // GET /status — live pipeline status for all topics.
+  // GET /status -- live pipeline status for all topics.
   impl_->server.Get("/status", [this, start_time = std::chrono::steady_clock::now()](const httplib::Request& /*req*/,
                                                                                      httplib::Response& res) {
     auto now = std::chrono::steady_clock::now();
@@ -339,14 +347,16 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
     std::ostringstream json;
     json << R"({"uptime_sec":)" << uptime_sec << R"(,"topics":{)";
 
-    for (size_t i = 0; i < endpoints_.size(); ++i) {
-      if (i > 0) json << ",";
-      const auto& ep = endpoints_[i];
-      json << R"(")" << ep.name << R"(":{)";
+    for (size_t idx = 0; idx < endpoints_.size(); ++idx) {
+      if (idx > 0) {
+        json << ",";
+      }
+      const auto& endpoint = endpoints_[idx];
+      json << R"(")" << endpoint.name << R"(":{)";
 
-      if (ep.stats != nullptr) {
-        auto state = ep.stats->GetState();
-        auto last_ts = ep.stats->last_frame_timestamp_ns.load(std::memory_order_relaxed);
+      if (endpoint.stats != nullptr) {
+        auto state = endpoint.stats->GetState();
+        auto last_ts = endpoint.stats->last_frame_timestamp_ns.load(std::memory_order_relaxed);
         uint64_t last_frame_ago_ms = 0;
         if (last_ts > 0 && now_ns > last_ts) {
           last_frame_ago_ms = (now_ns - last_ts) / 1000000;
@@ -358,16 +368,17 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
         }
 
         json << R"("state":")" << PipelineStateToString(state) << R"(",)";
-        json << R"("resolution":")" << ep.stats->width.load(std::memory_order_relaxed) << "x"
-             << ep.stats->height.load(std::memory_order_relaxed) << R"(",)";
-        json << R"("target_fps":)" << ep.topic_config.target_fps << ",";
-        json << R"("measured_fps":)" << (ep.stats->measured_fps_x10.load(std::memory_order_relaxed) / 10.0) << ",";
-        json << R"("bitrate_kbps":)" << ep.topic_config.bitrate_kbps << ",";
-        json << R"("frames_encoded":)" << ep.stats->frames_encoded.load(std::memory_order_relaxed) << ",";
-        json << R"("frames_dropped":)" << ep.stats->frames_dropped.load(std::memory_order_relaxed) << ",";
-        json << R"("clients_connected":)" << ep.ring->ClientCount() << ",";
+        json << R"("resolution":")" << endpoint.stats->width.load(std::memory_order_relaxed) << "x"
+             << endpoint.stats->height.load(std::memory_order_relaxed) << R"(",)";
+        json << R"("target_fps":)" << endpoint.topic_config.target_fps << ",";
+        json << R"("measured_fps":)" << (endpoint.stats->measured_fps_x10.load(std::memory_order_relaxed) / 10.0)
+             << ",";
+        json << R"("bitrate_kbps":)" << endpoint.topic_config.bitrate_kbps << ",";
+        json << R"("frames_encoded":)" << endpoint.stats->frames_encoded.load(std::memory_order_relaxed) << ",";
+        json << R"("frames_dropped":)" << endpoint.stats->frames_dropped.load(std::memory_order_relaxed) << ",";
+        json << R"("clients_connected":)" << endpoint.ring->ClientCount() << ",";
         json << R"("last_frame_ago_ms":)" << last_frame_ago_ms << ",";
-        json << R"("encoder_reinits":)" << ep.stats->encoder_reinits.load(std::memory_order_relaxed);
+        json << R"("encoder_reinits":)" << endpoint.stats->encoder_reinits.load(std::memory_order_relaxed);
       } else {
         json << R"("state":"unknown")";
       }
@@ -379,9 +390,10 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
     res.set_content(json.str(), "application/json");
   });
 
-  // GET /stream/{topic} — fMP4 video stream per topic.
-  for (auto& ep : endpoints_) {
-    impl_->server.Get(ep.path, [ring = ep.ring](const httplib::Request& /*req*/, httplib::Response& res) {
+  // GET /stream/{topic} -- fMP4 video stream per topic.
+  for (auto& endpoint : endpoints_) {
+    // NOLINTNEXTLINE(readability-function-cognitive-complexity)
+    impl_->server.Get(endpoint.path, [ring = endpoint.ring](const httplib::Request& /*req*/, httplib::Response& res) {
       res.set_header("Access-Control-Allow-Origin", "*");
       res.set_header("Cache-Control", "no-cache, no-store");
       res.set_header("Connection", "keep-alive");
@@ -390,6 +402,7 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
 
       res.set_chunked_content_provider(
           "video/mp4",
+          // NOLINTNEXTLINE(readability-function-cognitive-complexity)
           [ring](size_t /*offset*/, httplib::DataSink& sink) -> bool {
             uint64_t last_seq = 0;
 
@@ -409,7 +422,7 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
                 last_seq = result.last_sequence;
                 break;
               }
-              // No init segment yet — wait for data to arrive.
+              // No init segment yet -- wait for data to arrive.
               if (!ring->WaitForNew(0, std::chrono::milliseconds(1000))) {
                 continue;  // Timeout, retry.
               }
@@ -437,10 +450,15 @@ HttpServer::HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> en
   }
 }
 
+// NOLINTEND(cppcoreguidelines-pro-type-reinterpret-cast)
+// NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+
 HttpServer::~HttpServer() { Stop(); }
 
 void HttpServer::Start() {
-  if (running_) return;
+  if (running_) {
+    return;
+  }
   running_ = true;
 
   SPDLOG_INFO("HTTP server starting on {}:{}", config_.bind_address, config_.port);
@@ -453,7 +471,9 @@ void HttpServer::Start() {
 }
 
 void HttpServer::Stop() {
-  if (!running_) return;
+  if (!running_) {
+    return;
+  }
   running_ = false;
 
   impl_->server.stop();

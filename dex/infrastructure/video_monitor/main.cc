@@ -78,7 +78,8 @@ int main(int argc, char** argv) {
   // Wait for shutdown signal.
   auto& control = dex::shared_memory::StreamingControl::Instance();
   while (control.IsRunning()) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    std::this_thread::sleep_for(
+        std::chrono::milliseconds(100));  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
   }
 
   SPDLOG_INFO("Shutdown signal received");

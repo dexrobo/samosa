@@ -8,19 +8,19 @@
 namespace dex::video_monitor {
 
 struct TopicConfig {
-  std::string shm_name;  // Shared memory segment name (e.g., "/front_camera").
-  std::string endpoint;  // HTTP path suffix (e.g., "front_camera").
-  uint32_t target_fps{15};
-  uint32_t bitrate_kbps{1500};
-  uint32_t keyframe_interval{30};
-  uint32_t max_width{1280};  // Downsample to fit. 0 = no limit (use source resolution).
-  uint32_t max_height{720};  // Downsample to fit. 0 = no limit.
+  std::string shm_name;            // Shared memory segment name (e.g., "/front_camera").
+  std::string endpoint;            // HTTP path suffix (e.g., "front_camera").
+  uint32_t target_fps{15};         // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  uint32_t bitrate_kbps{1500};     // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  uint32_t keyframe_interval{30};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  uint32_t max_width{1280};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers) 0 = no limit.
+  uint32_t max_height{720};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers) 0 = no limit.
 };
 
 struct ServerConfig {
   std::string bind_address{"0.0.0.0"};
-  uint16_t port{8080};
-  uint32_t fragment_ring_size{120};
+  uint16_t port{8080};               // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+  uint32_t fragment_ring_size{120};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 };
 
 struct MonitorConfig {

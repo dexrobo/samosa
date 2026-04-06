@@ -4,6 +4,7 @@
 #include <cstring>
 #include <memory>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #include "spdlog/spdlog.h"
@@ -20,21 +21,25 @@ namespace {
 
 PixelFormat DetectPixelFormat(const dex::camera::CameraFrameBuffer& frame) {
   // Read the format string from the frame buffer.
-  std::string fmt(frame.color_format.data(), strnlen(frame.color_format.data(), frame.color_format.size()));
+  const std::string fmt(frame.color_format.data(), strnlen(frame.color_format.data(), frame.color_format.size()));
 
-  if (fmt == "BGR24" || fmt == "BGR" || fmt == "bgr24") return PixelFormat::kBGR24;
+  if (fmt == "BGR24" || fmt == "BGR" || fmt == "bgr24") {
+    return PixelFormat::kBGR24;
+  }
   // Default to RGB24 for "RGB24", "RGB", or unknown formats.
   return PixelFormat::kRGB24;
 }
 
 }  // namespace
 
-TopicPipeline::TopicPipeline(const TopicConfig& config, FragmentRing& ring) : config_(config), ring_(ring) {}
+TopicPipeline::TopicPipeline(TopicConfig config, FragmentRing& ring) : config_(std::move(config)), ring_(ring) {}
 
 TopicPipeline::~TopicPipeline() { Stop(); }
 
 void TopicPipeline::Start() {
-  if (running_.load()) return;
+  if (running_.load()) {
+    return;
+  }
   stop_requested_.store(false);
   thread_ = std::thread(&TopicPipeline::Run, this);
 }
@@ -47,9 +52,12 @@ void TopicPipeline::Stop() {
   running_.store(false);
 }
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 void TopicPipeline::Run() {
   running_.store(true);
   SPDLOG_INFO("Pipeline starting for topic '{}' (shm: {})", config_.endpoint, config_.shm_name);
+
+  // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
   // Retry loop for shared memory connection.
   constexpr int kMaxRetrySec = 30;
@@ -58,12 +66,12 @@ void TopicPipeline::Run() {
   auto& streaming_control = dex::shared_memory::StreamingControl::Instance();
 
   while (!stop_requested_.load() && streaming_control.IsRunning()) {
-    // Monitor is small on the stack — its internal buffer_cache_ is already heap-allocated.
+    // Monitor is small on the stack -- its internal buffer_cache_ is already heap-allocated.
     dex::shared_memory::Monitor<dex::camera::CameraFrameBuffer> monitor(config_.shm_name);
     if (!monitor.IsValid()) {
       stats_.SetState(PipelineState::kWaitingForShm);
       SPDLOG_WARN("Shared memory '{}' not available, retrying in {}s", config_.shm_name, retry_sec);
-      for (int i = 0; i < retry_sec * 10 && !stop_requested_.load() && streaming_control.IsRunning(); ++i) {
+      for (int idx = 0; idx < retry_sec * 10 && !stop_requested_.load() && streaming_control.IsRunning(); ++idx) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
       }
       retry_sec = std::min(retry_sec * 2, kMaxRetrySec);
@@ -75,7 +83,7 @@ void TopicPipeline::Run() {
 
     stats_.SetState(PipelineState::kWaitingForFrames);
 
-    // Pipeline state — lazily initialized on first valid frame.
+    // Pipeline state -- lazily initialized on first valid frame.
     std::unique_ptr<H264Encoder> encoder;
     std::unique_ptr<FMP4Muxer> muxer;
     std::vector<uint8_t> yuv_buf;
@@ -101,7 +109,7 @@ void TopicPipeline::Run() {
       encoder.reset();
       muxer.reset();
 
-      H264Encoder::Params enc_params{
+      const H264Encoder::Params enc_params{
           .width = width,
           .height = height,
           .fps = config_.target_fps,
@@ -130,17 +138,17 @@ void TopicPipeline::Run() {
 
     // Monitor::Run() with lazy encoding via blocking in the callback.
     // When idle (no clients): the callback blocks on WaitForClient(), freezing
-    // Run()'s loop — no futex wakes, no 20MB frame copies, near-zero CPU.
+    // Run()'s loop -- no futex wakes, no 20MB frame copies, near-zero CPU.
     // When active: Run() uses efficient futex-based waits between frames.
     monitor.Run(
-        [&](const dex::camera::CameraFrameBuffer& frame) {
+        [&](const dex::camera::CameraFrameBuffer& frame) {  // NOLINT(readability-function-cognitive-complexity)
           // Lazy encoding: block until a client connects (or shutdown).
           if (ring_.ClientCount() == 0) {
             stats_.SetState(PipelineState::kWaitingForFrames);
             while (ring_.ClientCount() == 0 && !stop_requested_.load() && streaming_control.IsRunning()) {
               ring_.WaitForClient(std::chrono::milliseconds(500));
             }
-            return;  // Skip this stale frame — Run() gets a fresh one.
+            return;  // Skip this stale frame -- Run() gets a fresh one.
           }
 
           // Frame rate limiting.
@@ -150,8 +158,8 @@ void TopicPipeline::Run() {
           }
           last_encode_time = now;
 
-          uint32_t src_width = frame.color_width;
-          uint32_t src_height = frame.color_height;
+          const uint32_t src_width = frame.color_width;
+          const uint32_t src_height = frame.color_height;
 
           if (src_width == 0 || src_height == 0 || src_width % 2 != 0 || src_height % 2 != 0) {
             return;
@@ -182,11 +190,11 @@ void TopicPipeline::Run() {
           stats_.SetState(PipelineState::kStreaming);
 
           // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          const uint8_t* rgb_src = reinterpret_cast<const uint8_t*>(frame.color_image_bytes.data());
+          const auto* rgb_src = reinterpret_cast<const uint8_t*>(frame.color_image_bytes.data());
           size_t rgb_stride = static_cast<size_t>(src_width) * 3;
 
           if (needs_downsample) {
-            size_t dst_stride = static_cast<size_t>(width) * 3;
+            const size_t dst_stride = static_cast<size_t>(width) * 3;
             downsampled_rgb.resize(dst_stride * height);
             DownsampleRGB(rgb_src, src_width, src_height, rgb_stride, downsampled_rgb.data(), width, height,
                           dst_stride);
@@ -194,11 +202,13 @@ void TopicPipeline::Run() {
             rgb_stride = dst_stride;
           }
 
-          ConvertToI420(rgb_src, rgb_stride, yuv_buf.data(), yuv_buf.data() + static_cast<size_t>(width) * height,
-                        yuv_buf.data() + static_cast<size_t>(width) * height + (width / 2) * (height / 2), width,
+          // NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses,bugprone-implicit-widening-of-multiplication-result)
+          ConvertToI420(rgb_src, rgb_stride, yuv_buf.data(), yuv_buf.data() + (static_cast<size_t>(width) * height),
+                        yuv_buf.data() + (static_cast<size_t>(width) * height) + ((width / 2) * (height / 2)), width,
                         height, pixel_format);
+          // NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic,readability-math-missing-parentheses,bugprone-implicit-widening-of-multiplication-result)
 
-          uint64_t timestamp_us = TimeBase::Instance().MicrosecondsSinceStart();
+          const uint64_t timestamp_us = TimeBase::Instance().MicrosecondsSinceStart();
           auto encoded = encoder->Encode(yuv_buf.data(), timestamp_us);
           if (!encoded.has_value()) {
             stats_.frames_dropped.fetch_add(1, std::memory_order_relaxed);
@@ -206,9 +216,10 @@ void TopicPipeline::Run() {
           }
 
           if (!muxer && encoded->is_idr) {
-            std::vector<uint8_t> sps, pps;
+            std::vector<uint8_t> sps;
+            std::vector<uint8_t> pps;
             if (ExtractSPSPPS(encoded->nals, sps, pps)) {
-              FMP4Muxer::TrackParams track_params{
+              const FMP4Muxer::TrackParams track_params{
                   .width = width,
                   .height = height,
                   .timescale = timescale,
@@ -221,13 +232,15 @@ void TopicPipeline::Run() {
             }
           }
 
-          if (!muxer) return;
+          if (!muxer) {
+            return;
+          }
 
           const uint32_t duration = timescale / config_.target_fps;
 
-          uint64_t frame_timestamp_nanos = frame.timestamp_nanos;
+          const uint64_t frame_timestamp_nanos = frame.timestamp_nanos;
           if (prev_timestamp_nanos > 0 && frame_timestamp_nanos > prev_timestamp_nanos) {
-            uint64_t delta_nanos = frame_timestamp_nanos - prev_timestamp_nanos;
+            const uint64_t delta_nanos = frame_timestamp_nanos - prev_timestamp_nanos;
             if (delta_nanos > 0) {
               stats_.measured_fps_x10.store(static_cast<uint32_t>(10000000000ULL / delta_nanos),
                                             std::memory_order_relaxed);
@@ -235,7 +248,7 @@ void TopicPipeline::Run() {
           }
           prev_timestamp_nanos = frame_timestamp_nanos;
 
-          uint64_t decode_time = static_cast<uint64_t>(frame_count) * duration;
+          const uint64_t decode_time = frame_count * duration;
           auto fragment_data = muxer->MuxFragment(encoded->nals, decode_time, duration, encoded->is_idr);
 
           auto shared_data = std::make_shared<const std::vector<uint8_t>>(std::move(fragment_data));
@@ -254,6 +267,8 @@ void TopicPipeline::Run() {
           ++frame_count;
         },
         0.1, dex::shared_memory::MonitorReadMode::Opportunistic);
+
+    // NOLINTEND(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
 
     if (frame_count > 0) {
       SPDLOG_INFO("Pipeline '{}' encoded {} frames", config_.endpoint, frame_count);

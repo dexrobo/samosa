@@ -30,6 +30,7 @@ inline const char* PipelineStateToString(PipelineState state) {
 
 /// Lock-free pipeline statistics. Written by the pipeline thread (sole writer),
 /// read by the HTTP handler on demand. No synchronization needed.
+// NOLINTBEGIN(misc-non-private-member-variables-in-classes)
 struct PipelineStats {
   std::atomic<uint64_t> frames_encoded{0};
   std::atomic<uint64_t> frames_dropped{0};
@@ -47,6 +48,8 @@ struct PipelineStats {
     return static_cast<PipelineState>(state.load(std::memory_order_relaxed));
   }
 };
+
+// NOLINTEND(misc-non-private-member-variables-in-classes)
 
 }  // namespace dex::video_monitor
 

@@ -19,12 +19,12 @@ class FMP4Muxer {
   struct TrackParams {
     uint32_t width{};
     uint32_t height{};
-    uint32_t timescale{90000};  // 90kHz is standard for H.264 in MPEG-TS/MP4.
+    uint32_t timescale{90000};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers) 90kHz H.264
     std::vector<uint8_t> sps;   // Sequence Parameter Set (raw NALU, no start code).
     std::vector<uint8_t> pps;   // Picture Parameter Set (raw NALU, no start code).
   };
 
-  explicit FMP4Muxer(const TrackParams& params);
+  explicit FMP4Muxer(TrackParams params);
 
   /// Generate the init segment (ftyp + moov). Send once per client connection.
   [[nodiscard]] std::vector<uint8_t> GetInitSegment() const;

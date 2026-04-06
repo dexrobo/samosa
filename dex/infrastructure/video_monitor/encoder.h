@@ -16,9 +16,9 @@ class H264Encoder {
   struct Params {
     uint32_t width{};
     uint32_t height{};
-    uint32_t fps{30};
-    uint32_t bitrate_kbps{2000};
-    uint32_t keyframe_interval{60};
+    uint32_t fps{30};                // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+    uint32_t bitrate_kbps{2000};     // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
+    uint32_t keyframe_interval{60};  // NOLINT(cppcoreguidelines-avoid-magic-numbers,readability-magic-numbers)
   };
 
   struct EncodedFrame {

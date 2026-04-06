@@ -21,8 +21,11 @@ class TimeBase {
         std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - epoch_).count());
   }
 
+  ~TimeBase() = default;
   TimeBase(const TimeBase&) = delete;
   TimeBase& operator=(const TimeBase&) = delete;
+  TimeBase(TimeBase&&) = delete;
+  TimeBase& operator=(TimeBase&&) = delete;
 
  private:
   TimeBase() : epoch_(std::chrono::steady_clock::now()) {}

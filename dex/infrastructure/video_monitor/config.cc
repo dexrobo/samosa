@@ -8,31 +8,52 @@
 #include "spdlog/spdlog.h"
 #include "toml.hpp"
 
+// NOLINTBEGIN(cppcoreguidelines-pro-bounds-pointer-arithmetic)
+
 namespace dex::video_monitor {
 namespace {
 
+// NOLINTNEXTLINE(readability-function-cognitive-complexity)
 MonitorConfig ParseToml(const toml::table& tbl) {
   MonitorConfig config;
 
-  if (auto server = tbl["server"].as_table()) {
-    if (auto val = (*server)["bind_address"].value<std::string>()) config.server.bind_address = *val;
-    if (auto val = (*server)["port"].value<int64_t>()) config.server.port = static_cast<uint16_t>(*val);
-    if (auto val = (*server)["fragment_ring_size"].value<int64_t>())
+  if (const auto* server = tbl["server"].as_table()) {
+    if (auto val = (*server)["bind_address"].value<std::string>()) {
+      config.server.bind_address = *val;
+    }
+    if (auto val = (*server)["port"].value<int64_t>()) {
+      config.server.port = static_cast<uint16_t>(*val);
+    }
+    if (auto val = (*server)["fragment_ring_size"].value<int64_t>()) {
       config.server.fragment_ring_size = static_cast<uint32_t>(*val);
+    }
   }
 
-  if (auto topics = tbl["topics"].as_array()) {
+  if (const auto* topics = tbl["topics"].as_array()) {
     for (const auto& elem : *topics) {
-      if (auto topic_tbl = elem.as_table()) {
+      if (const auto* topic_tbl = elem.as_table()) {
         TopicConfig topic;
-        if (auto val = (*topic_tbl)["shm_name"].value<std::string>()) topic.shm_name = *val;
-        if (auto val = (*topic_tbl)["endpoint"].value<std::string>()) topic.endpoint = *val;
-        if (auto val = (*topic_tbl)["target_fps"].value<int64_t>()) topic.target_fps = static_cast<uint32_t>(*val);
-        if (auto val = (*topic_tbl)["bitrate_kbps"].value<int64_t>()) topic.bitrate_kbps = static_cast<uint32_t>(*val);
-        if (auto val = (*topic_tbl)["keyframe_interval"].value<int64_t>())
+        if (auto val = (*topic_tbl)["shm_name"].value<std::string>()) {
+          topic.shm_name = *val;
+        }
+        if (auto val = (*topic_tbl)["endpoint"].value<std::string>()) {
+          topic.endpoint = *val;
+        }
+        if (auto val = (*topic_tbl)["target_fps"].value<int64_t>()) {
+          topic.target_fps = static_cast<uint32_t>(*val);
+        }
+        if (auto val = (*topic_tbl)["bitrate_kbps"].value<int64_t>()) {
+          topic.bitrate_kbps = static_cast<uint32_t>(*val);
+        }
+        if (auto val = (*topic_tbl)["keyframe_interval"].value<int64_t>()) {
           topic.keyframe_interval = static_cast<uint32_t>(*val);
-        if (auto val = (*topic_tbl)["max_width"].value<int64_t>()) topic.max_width = static_cast<uint32_t>(*val);
-        if (auto val = (*topic_tbl)["max_height"].value<int64_t>()) topic.max_height = static_cast<uint32_t>(*val);
+        }
+        if (auto val = (*topic_tbl)["max_width"].value<int64_t>()) {
+          topic.max_width = static_cast<uint32_t>(*val);
+        }
+        if (auto val = (*topic_tbl)["max_height"].value<int64_t>()) {
+          topic.max_height = static_cast<uint32_t>(*val);
+        }
 
         // Default endpoint from shm_name: strip leading '/' and replace '/' with '_'.
         if (topic.endpoint.empty() && !topic.shm_name.empty()) {
@@ -40,8 +61,10 @@ MonitorConfig ParseToml(const toml::table& tbl) {
           if (!topic.endpoint.empty() && topic.endpoint[0] == '/') {
             topic.endpoint.erase(0, 1);
           }
-          for (auto& ch : topic.endpoint) {
-            if (ch == '/') ch = '_';
+          for (auto& chr : topic.endpoint) {
+            if (chr == '/') {
+              chr = '_';
+            }
           }
         }
 
@@ -55,12 +78,16 @@ MonitorConfig ParseToml(const toml::table& tbl) {
 
 // Derive an endpoint name from a shared memory name.
 std::string EndpointFromShmName(const std::string& shm_name) {
-  std::string ep = shm_name;
-  if (!ep.empty() && ep[0] == '/') ep.erase(0, 1);
-  for (auto& ch : ep) {
-    if (ch == '/') ch = '_';
+  std::string endpoint = shm_name;
+  if (!endpoint.empty() && endpoint[0] == '/') {
+    endpoint.erase(0, 1);
   }
-  return ep;
+  for (auto& chr : endpoint) {
+    if (chr == '/') {
+      chr = '_';
+    }
+  }
+  return endpoint;
 }
 
 }  // namespace
@@ -73,8 +100,8 @@ MonitorConfig LoadConfigFromString(const std::string& toml_content) {
 namespace {
 
 // Require that a flag has a following value argument.
-void RequireValue(const std::string& flag, int i, int argc) {
-  if (i + 1 >= argc) {
+void RequireValue(const std::string& flag, int idx, int argc) {
+  if (idx + 1 >= argc) {
     throw std::runtime_error("Flag '" + flag + "' requires a value");
   }
 }
@@ -87,21 +114,21 @@ MonitorConfig LoadConfig(int argc, const char* const* argv) {
   std::vector<std::string> cli_topics;
 
   // First pass: validate all arguments and collect values.
-  for (int i = 1; i < argc; ++i) {
-    std::string arg = argv[i];
+  for (int idx = 1; idx < argc; ++idx) {
+    const std::string arg = argv[idx];
 
     if (arg == "--config" || arg == "-c") {
-      RequireValue(arg, i, argc);
-      config_path = argv[++i];
+      RequireValue(arg, idx, argc);
+      config_path = argv[++idx];
     } else if (arg == "--port") {
-      RequireValue(arg, i, argc);
-      config.server.port = static_cast<uint16_t>(std::stoi(argv[++i]));
+      RequireValue(arg, idx, argc);
+      config.server.port = static_cast<uint16_t>(std::stoi(argv[++idx]));
     } else if (arg == "--bind") {
-      RequireValue(arg, i, argc);
-      config.server.bind_address = argv[++i];
+      RequireValue(arg, idx, argc);
+      config.server.bind_address = argv[++idx];
     } else if (arg == "--topic") {
-      RequireValue(arg, i, argc);
-      cli_topics.emplace_back(argv[++i]);
+      RequireValue(arg, idx, argc);
+      cli_topics.emplace_back(argv[++idx]);
     } else if (arg == "--help" || arg == "-h") {
       throw std::runtime_error(
           "Usage: video_monitor [OPTIONS]\n"
@@ -126,14 +153,14 @@ MonitorConfig LoadConfig(int argc, const char* const* argv) {
     config = ParseToml(result);
 
     // Re-apply CLI overrides after TOML loading (CLI takes precedence).
-    for (int i = 1; i < argc; ++i) {
-      std::string arg = argv[i];
+    for (int idx = 1; idx < argc; ++idx) {
+      const std::string arg = argv[idx];
       if (arg == "--port") {
-        config.server.port = static_cast<uint16_t>(std::stoi(argv[++i]));
+        config.server.port = static_cast<uint16_t>(std::stoi(argv[++idx]));
       } else if (arg == "--bind") {
-        config.server.bind_address = argv[++i];
+        config.server.bind_address = argv[++idx];
       } else {
-        ++i;  // Skip value for other flags (already validated above).
+        ++idx;  // Skip value for other flags (already validated above).
       }
     }
   }
@@ -150,3 +177,5 @@ MonitorConfig LoadConfig(int argc, const char* const* argv) {
 }
 
 }  // namespace dex::video_monitor
+
+// NOLINTEND(cppcoreguidelines-pro-bounds-pointer-arithmetic)

@@ -21,7 +21,7 @@ class HttpServer {
     TopicConfig topic_config;    // For reporting target_fps, bitrate, etc.
   };
 
-  HttpServer(const ServerConfig& config, std::vector<TopicEndpoint> endpoints);
+  HttpServer(ServerConfig config, std::vector<TopicEndpoint> endpoints);
   ~HttpServer();
 
   HttpServer(const HttpServer&) = delete;

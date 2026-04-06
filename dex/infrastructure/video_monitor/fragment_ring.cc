@@ -7,7 +7,7 @@ namespace dex::video_monitor {
 FragmentRing::FragmentRing(size_t capacity) : capacity_(capacity) { ring_.resize(capacity); }
 
 void FragmentRing::Push(Fragment fragment) {
-  std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
 
   ++head_sequence_;
   fragment.sequence = head_sequence_;
@@ -21,7 +21,7 @@ void FragmentRing::Push(Fragment fragment) {
 }
 
 void FragmentRing::SetInitSegment(std::vector<uint8_t> init) {
-  std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   init_segment_ = std::move(init);
 
   // Invalidate all existing fragments — they were encoded with the previous
@@ -37,7 +37,7 @@ void FragmentRing::SetInitSegment(std::vector<uint8_t> init) {
 }
 
 FragmentRing::ReadResult FragmentRing::ReadFrom(uint64_t after_sequence) const {
-  std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
 
   ReadResult result;
   result.last_sequence = after_sequence;
@@ -59,7 +59,7 @@ FragmentRing::ReadResult FragmentRing::ReadFrom(uint64_t after_sequence) const {
   }
 
   // Check if the requested sequence is too old (already overwritten in the ring).
-  uint64_t oldest_available = (head_sequence_ > capacity_) ? (head_sequence_ - capacity_ + 1) : 1;
+  const uint64_t oldest_available = (head_sequence_ > capacity_) ? (head_sequence_ - capacity_ + 1) : 1;
   if (start_seq < oldest_available) {
     // Skip to the latest IDR if available, otherwise oldest available.
     start_seq = (latest_idr_sequence_ >= oldest_available) ? latest_idr_sequence_ : oldest_available;
@@ -87,13 +87,13 @@ bool FragmentRing::WaitForNew(uint64_t after_sequence, std::chrono::milliseconds
 }
 
 void FragmentRing::NotifyAll() {
-  std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   shutdown_ = true;
   cv_.notify_all();
 }
 
 uint64_t FragmentRing::HeadSequence() const {
-  std::lock_guard lock(mutex_);
+  const std::scoped_lock lock(mutex_);
   return head_sequence_;
 }
 
