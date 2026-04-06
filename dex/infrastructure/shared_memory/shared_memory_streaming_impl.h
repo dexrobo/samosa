@@ -67,6 +67,14 @@ bool InitializeBuffer(StreamingSharedMemoryBuffer<Buffer, buffer_size>* buffer) 
       shm_buffer = Buffer{};
     }
   }
+
+  // Wake any monitors/consumers blocked on futex waits. The atomic fields above
+  // were just reset, but waiters won't notice unless we issue a futex_wake — simply
+  // changing the value in memory doesn't unblock a futex syscall.
+  if constexpr (requires { buffer->sequence_and_writing; }) {
+    detail::GetDefaultFutex()->Wake(buffer->sequence_and_writing, INT_MAX);
+  }
+
   return true;
 }
 

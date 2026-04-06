@@ -49,7 +49,6 @@ concept ConsumerFunction = ::std::invocable<F, const Buffer&> || ::std::invocabl
 
 constexpr uint32_t kWritingBitMask = 1U << 31;        // Highest bit indicates writing
 constexpr uint32_t kSequenceMask = ~kWritingBitMask;  // All bits except highest (31 bits for sequence)
-constexpr uint32_t kSequenceComparisonWindow = (kSequenceMask + 1U) >> 1;
 
 // Extract sequence from packed value
 inline uint32_t GetSequence(const uint32_t packed_value) { return packed_value & kSequenceMask; }
@@ -60,21 +59,6 @@ inline bool IsWriting(const uint32_t packed_value) { return (packed_value & kWri
 // Create packed value from sequence and writing flag
 inline uint32_t PackSequenceAndWriting(const uint32_t sequence, const bool is_writing) {
   return (sequence & kSequenceMask) | (is_writing ? kWritingBitMask : 0);
-}
-
-// Returns true when `candidate` is a newer published monitor sequence than `reference`.
-// Comparisons are wrap-safe within half of the 31-bit sequence space, which is far larger
-// than any realistic backlog between observed samples.
-inline bool IsNewerSequence(const uint32_t candidate, const uint32_t reference) {
-  if (candidate == kNoCompletedMonitorSequence) {
-    return false;
-  }
-  if (reference == kNoCompletedMonitorSequence) {
-    return true;
-  }
-
-  const uint32_t delta = (candidate - reference) & kSequenceMask;
-  return delta != 0 && delta < kSequenceComparisonWindow;
 }
 
 }  // namespace detail
