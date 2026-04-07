@@ -16,8 +16,10 @@ namespace dex::camera {
 constexpr std::size_t kNameLength = 64;
 constexpr std::size_t kSerialNumberLength = 128;
 
-constexpr std::size_t kMaxWidth = 1920;
-constexpr std::size_t kMaxHeight = 1080;
+constexpr std::size_t kMaxJoints = 12;
+
+constexpr std::size_t kMaxWidth = 3840;
+constexpr std::size_t kMaxHeight = 2160;
 
 constexpr std::size_t kFormatStringLength = 8;
 constexpr std::size_t kIntrinsicMatrixSize = 9;
@@ -85,6 +87,13 @@ struct CameraFrameBuffer {
   float depth_scale{};
   bool cam_to_world_extrinsics_set{};
   std::array<double, kExtrinsicMatrixSize> cam_to_world_extrinsics{};
+
+  std::chrono::time_point<std::chrono::system_clock>
+      kinematic_timestamp;  // Timestamp from kinematics data. Only set when camera is mobile.
+  uint32_t joint_velocity_count{};
+  std::array<double, kMaxJoints> joint_velocities{};
+  std::chrono::time_point<std::chrono::system_clock>
+      joint_velocity_timestamp;  // Timestamp from joint state message header.
 
   // ===== Common Fields =====
   std::array<char, kSerialNumberLength> serial_number{};
