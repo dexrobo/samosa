@@ -211,6 +211,51 @@ class TestSharedMemoryCameraBindings(unittest.TestCase):
         assert buffer.depth_scale == 0.0
         assert buffer.stereo_baseline_meters == 0.0
 
+    def test_format_fields_default_empty(self) -> None:
+        """A fresh CameraFrameBuffer should have empty format strings."""
+        buffer = shm.CameraFrameBuffer()
+        assert buffer.color_format == ""
+        assert buffer.depth_format == ""
+        assert buffer.color_stereo_right_format == ""
+
+    def test_format_fields_roundtrip(self) -> None:
+        """Format strings should survive set/get and Producer -> Monitor roundtrip."""
+        shm_name = "test_shm_format"
+        shm.destroy_shared_memory(shm_name)
+        ctrl = shm.StreamingControl.instance()
+        ctrl.reset()
+        assert shm.initialize_shared_memory(shm_name)
+
+        write_buffer = shm.CameraFrameBuffer()
+        write_buffer.frame_id = 99
+        write_buffer.color_width = 32
+        write_buffer.color_height = 16
+        write_buffer.color_image_size = 32 * 16 * 3
+        write_buffer.color_format = "jpeg"
+        write_buffer.depth_format = "uint16"
+        write_buffer.color_stereo_right_format = "raw"
+
+        # Verify local set/get
+        assert write_buffer.color_format == "jpeg"
+        assert write_buffer.depth_format == "uint16"
+        assert write_buffer.color_stereo_right_format == "raw"
+
+        # Verify roundtrip through shared memory
+        producer = shm.Producer(shm_name)
+        assert producer.is_valid()
+        producer.write(write_buffer)
+
+        monitor = shm.Monitor(shm_name)
+        assert monitor.is_valid()
+        dst = shm.CameraFrameBuffer()
+        found = monitor.read_into(dst, 0.1, shm.MonitorReadMode.WaitForStableSnapshot)
+        assert found
+        assert dst.color_format == "jpeg"
+        assert dst.depth_format == "uint16"
+        assert dst.color_stereo_right_format == "raw"
+
+        shm.destroy_shared_memory(shm_name)
+
 
 if __name__ == "__main__":
     unittest.main()
