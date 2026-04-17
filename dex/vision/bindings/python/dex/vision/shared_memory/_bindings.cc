@@ -175,7 +175,26 @@ NB_MODULE(shared_memory_bindings, module_handle) {
           })
       .def_rw("cam_to_world_extrinsics_set", &dex::camera::CameraFrameBuffer::cam_to_world_extrinsics_set)
       .def_rw("depth_scale", &dex::camera::CameraFrameBuffer::depth_scale)
-      .def_rw("stereo_baseline_meters", &dex::camera::CameraFrameBuffer::stereo_baseline_meters);
+      .def_rw("stereo_baseline_meters", &dex::camera::CameraFrameBuffer::stereo_baseline_meters)
+      // ===== Image Format Fields =====
+      .def_prop_rw(
+          "color_format",
+          [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.color_format.data()); },
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& fmt) {
+            dex::camera::StringToArray(fmt, buffer.color_format);
+          })
+      .def_prop_rw(
+          "depth_format",
+          [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.depth_format.data()); },
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& fmt) {
+            dex::camera::StringToArray(fmt, buffer.depth_format);
+          })
+      .def_prop_rw(
+          "color_stereo_right_format",
+          [](dex::camera::CameraFrameBuffer& buffer) { return std::string(buffer.color_stereo_right_format.data()); },
+          [](dex::camera::CameraFrameBuffer& buffer, const std::string& fmt) {
+            dex::camera::StringToArray(fmt, buffer.color_stereo_right_format);
+          });
 
   using CameraBuffer = dex::camera::CameraFrameBuffer;
   using ShmBuffer = dex::shared_memory::SharedMemory<CameraBuffer, 2, dex::shared_memory::LockFreeSharedMemoryBuffer>;
