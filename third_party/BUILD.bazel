@@ -1,0 +1,7 @@
+# Third-party dependency build files.
+# These are referenced by http_archive rules in MODULE.bazel.
+
+exports_files([
+    "cpp_httplib.BUILD",
+    "openh264.BUILD",
+])

@@ -136,6 +136,43 @@ Read a video file in Python and monitor latency in C++.
     bazel run //dex/vision/examples/shared_memory_vision:camera_consumer_cc -- cross_lang_2
     ```
 
+### Option D: Video Monitor HTTP Stream
+
+This uses the standalone video monitor binary to encode shared memory frames to H.264
+and serve them as fMP4 over HTTP — playable directly in a browser.
+
+**Terminal 1** — Start a producer that streams a video file to shared memory:
+
+```bash
+bazel run //dex/vision/examples/shared_memory_vision:video_producer_py -- \
+  path/to/your/video.mp4 /demo_camera
+```
+
+**Terminal 2** — Start the video monitor (encodes to H.264, serves on port 9876):
+
+```bash
+bazel run //dex/infrastructure/video_monitor:video_monitor -- \
+  --topic /demo_camera --port 9876
+```
+
+**View the stream:**
+
+* Browser: open `http://localhost:9876/stream/demo_camera`
+* List available topics: `curl http://localhost:9876/topics`
+* Save a clip: `curl http://localhost:9876/stream/demo_camera --max-time 10 -o clip.mp4`
+
+Multiple clients can connect to the same stream simultaneously — the encoder runs once
+and fans out to all connected clients.
+
+For multiple cameras, repeat `--topic` or use a TOML config file:
+
+```bash
+bazel run //dex/infrastructure/video_monitor:video_monitor -- \
+  --topic /front_camera --topic /rear_camera --port 9876
+```
+
+Each topic gets its own endpoint: `/stream/front_camera`, `/stream/rear_camera`, etc.
+
 ## Python Bindings
 
 The Python applications use the production bindings located in `//dex/vision/bindings/python`. These bindings provide zero-copy access to the raw image buffers using NumPy.
